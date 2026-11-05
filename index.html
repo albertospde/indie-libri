@@ -472,7 +472,7 @@ function prepara(r){
   r._st = statoDi(r);
   r._stato = r._st.lab;
   r._conf = r.copie_confermate ?? -1;
-  r._agenti = r.agenti_ruolo_agente || [];
+  r._agenti = (r.agenti_ruolo_agente || []).filter(Boolean);
   r._agente = r._agenti.join(', ');
   r._search = norm([r.codice_cliente, r.ragione_sociale, r.nome_file, r.indirizzo, r.citta, r.provincia, r.cap, r.partita_iva, r.note, r._agente].join(' '));
   return r;
