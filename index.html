@@ -255,6 +255,7 @@
           <span class="spacer"></span>
           <button class="btn-secondary" id="conferma-tutte-btn" type="button">✓ Conferma le visibili</button>
           <button class="btn-secondary" id="export-btn" type="button">📥 Esporta</button>
+          <button class="btn-secondary" id="email-btn" type="button" title="Prepara una bozza con le librerie visibili, l'Excel allegato e gli indirizzi degli agenti coinvolti">✉ Email agenti</button>
           <button class="btn-secondary" id="reset-btn" type="button">↺ Reset filtri</button>
           <button class="btn-primary" id="add-btn" type="button" style="padding:9px 14px;font-size:14.5px;">＋ Aggiungi libreria</button>
         </div>
@@ -347,13 +348,13 @@ const normStretto = s => norm(s).replace(/[^a-z0-9]/g, '');
 
 let currentUser = null;
 let toastT = null;
-function toast(msg, isErr){
+function toast(msg, isErr, durata){
   const t = $('toast');
   t.textContent = msg;
   t.className = isErr ? 'err' : '';
   t.style.display = 'block';
   clearTimeout(toastT);
-  toastT = setTimeout(() => { t.style.display = 'none'; }, isErr ? 6000 : 2500);
+  toastT = setTimeout(() => { t.style.display = 'none'; }, durata || (isErr ? 6000 : 2500));
 }
 
 /* ---------- TEMA ---------- */
@@ -960,7 +961,7 @@ function descriviFiltri(){
 }
 
 // Costruisce il file Excel con le righe passate; restituisce il workbook
-function creaExcel(righe){
+function creaExcel(righe, perAgenti = false){
   const COL = [
     { h:'Codice', w:10 }, { h:'Libreria', w:38 }, { h:'Indirizzo', w:34 }, { h:'CAP', w:8 }, { h:'Città', w:22 }, { h:'Prov.', w:7 },
     { h:'Stato', w:17 }, { h:'Motivo', w:26 }, { h:'Agente', w:30 }, { h:'Copie', w:9 }, { h:'Copie confermate', w:12 },
@@ -1075,8 +1076,70 @@ function creaExcel(righe){
     c.numFmt = '#,##0';
   });
   if (righe.length) ws.autoFilter = { from:{ row:HEAD, column:1 }, to:{ row:ultimo, column:COL.length } };
-  aggiungiFoglioInterne(wb);
+  if (perAgenti) aggiungiFoglioRiepilogo(wb, righe);
+  else aggiungiFoglioInterne(wb);
   return wb;
+}
+
+// Quantità per agente. Una libreria con due agenti conta per entrambi: il totale viene dalle righe, senza doppi conteggi
+function aggiungiFoglioRiepilogo(wb, righe){
+  const voci = new Map();
+  const somma = (nome, r) => {
+    const v = voci.get(nome) || { librerie:0, copie:0, conf:0 };
+    v.librerie++;
+    v.copie += r.copie;
+    v.conf += r.copie_confermate || 0;
+    voci.set(nome, v);
+  };
+  righe.forEach(r => (r._agenti.length ? r._agenti : ['Senza agente']).forEach(nome => somma(nome, r)));
+  const nomi = [...voci.keys()].sort((a, b) => (a === 'Senza agente') - (b === 'Senza agente') || a.localeCompare(b, 'it'));
+
+  const ws = wb.addWorksheet('Riepilogo agenti', { views:[{ state:'frozen', ySplit:2, showGridLines:false }] });
+  ws.columns = [{ width:36 }, { width:11 }, { width:10 }, { width:12 }];
+  ws.mergeCells(1, 1, 1, 4);
+  const t = ws.getCell(1, 1);
+  t.value = `Riepilogo per agente${numeroAperto() ? ' - ' + numeroAperto().titolo : ''}`;
+  t.font = { name:'Calibri', size:16, bold:true, color:{ argb:XL.bianco } };
+  t.fill = riempi(XL.scuro);
+  t.alignment = { vertical:'middle', indent:1 };
+  ws.getRow(1).height = 30;
+  const lato = { style:'thin', color:{ argb:XL.bordo } };
+  const bordi = { top:lato, left:lato, bottom:lato, right:lato };
+  const head = ws.getRow(2);
+  head.values = ['Agente', 'Librerie', 'Copie', 'Copie confermate'];
+  head.height = 32;
+  head.eachCell(c => {
+    c.font = { name:'Calibri', size:11, bold:true, color:{ argb:XL.bianco } };
+    c.fill = riempi(XL.medio);
+    c.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+    c.border = bordi;
+  });
+  nomi.forEach((nome, i) => {
+    const v = voci.get(nome);
+    const row = ws.addRow([nome, v.librerie, v.copie, v.conf]);
+    row.eachCell({ includeEmpty:true }, c => {
+      c.font = { name:'Calibri', size:11, color:{ argb:XL.testo } };
+      c.fill = riempi(i % 2 ? XL.chiaro : XL.bianco);
+      c.border = bordi;
+      c.numFmt = '#,##0';
+    });
+    row.getCell(1).font = { name:'Calibri', size:11, bold:true, color:{ argb:XL.testo } };
+  });
+  const tot = ws.addRow(['TOTALE', righe.length, righe.reduce((s, r) => s + r.copie, 0), righe.reduce((s, r) => s + (r.copie_confermate || 0), 0)]);
+  tot.height = 24;
+  for (let n = 1; n <= 4; n++) {
+    const c = tot.getCell(n);
+    c.fill = riempi(XL.scuro);
+    c.font = { name:'Calibri', size:12, bold:true, color:{ argb:XL.bianco } };
+    c.numFmt = '#,##0';
+  }
+  if (righe.some(r => r._agenti.length > 1)) {
+    const nota = ws.addRow(['Le librerie con più agenti contano per ciascuno di loro; il totale le conta una volta sola.']);
+    ws.mergeCells(nota.number, 1, nota.number, 4);
+    nota.getCell(1).font = { name:'Calibri', size:10, italic:true, color:{ argb:XL.testo } };
+    nota.getCell(1).alignment = { wrapText:true, vertical:'top' };
+    nota.height = 30;
+  }
 }
 
 function aggiungiFoglioInterne(wb){
@@ -1125,24 +1188,129 @@ function aggiungiFoglioInterne(wb){
   tot.getCell(3).numFmt = '#,##0';
 }
 
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+function nomeFileDistribuzione(){
+  const parte = (numeroAperto()?.titolo || '').normalize('NFD').replace(/[^A-Za-z0-9]+/g, '').slice(0, 30);
+  return `IndieLibri_DistribuzioneRivista_${parte ? parte + '_' : ''}${new Date().toISOString().slice(0, 10)}`;
+}
+function scaricaFile(blob, nome){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 $('export-btn').addEventListener('click', async () => {
   const btn = $('export-btn');
   btn.disabled = true;
   try {
     await caricaExcelJS();
     const buf = await creaExcel(st.filtered).xlsx.writeBuffer();
-    const url = URL.createObjectURL(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-    const a = document.createElement('a');
-    a.href = url;
-    const parte = (numeroAperto()?.titolo || '').normalize('NFD').replace(/[^A-Za-z0-9]+/g, '').slice(0, 30);
-    a.download = `IndieLibri_DistribuzioneRivista_${parte ? parte + '_' : ''}${new Date().toISOString().slice(0, 10)}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    scaricaFile(new Blob([buf], { type:XLSX_MIME }), nomeFileDistribuzione() + '.xlsx');
   } catch (e) {
     console.error(e);
     toast('Esportazione non riuscita: ' + (e.message || e), true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ---------- EMAIL AGENTI ---------- */
+// Un link mailto: non può portare allegati: si scarica un file .eml che il programma di posta apre come bozza
+// (X-Unsent: 1), con destinatari, testo e Excel già dentro. Non parte nulla finché non si preme Invia.
+function base64Di(bytes){
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+const base64Testo = testo => base64Di(new TextEncoder().encode(testo));
+const aRighe76 = b64 => b64.replace(/.{1,76}/g, '$&\r\n');
+
+function creaEml({ a, oggetto, testo, allegato, nomeAllegato }){
+  const confine = 'indielibri' + Date.now().toString(36);
+  return [
+    `To: ${a.join(', ')}`,
+    `Subject: =?UTF-8?B?${base64Testo(oggetto)}?=`,
+    'X-Unsent: 1',
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${confine}"`,
+    '',
+    `--${confine}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    aRighe76(base64Testo(testo)),
+    `--${confine}`,
+    `Content-Type: ${XLSX_MIME}; name="${nomeAllegato}"`,
+    'Content-Transfer-Encoding: base64',
+    `Content-Disposition: attachment; filename="${nomeAllegato}"`,
+    '',
+    aRighe76(base64Di(allegato)),
+    `--${confine}--`,
+    '',
+  ].join('\r\n');
+}
+
+function testoEmail(){
+  const n = numeroAperto();
+  const uscita = n?.uscita ? ` (uscita ${fmtData(n.uscita)})` : '';
+  return [
+    'Buongiorno,',
+    '',
+    `in allegato trovate la distribuzione della rivista${n ? ' ' + n.titolo : ''}${uscita}, con l'elenco delle librerie e le copie previste per ciascuna.`,
+    '',
+    'Nel foglio "Riepilogo agenti" trovate le quantità per agente.',
+    '',
+    'Se ci sono correzioni da fare, fatemelo sapere.',
+    '',
+    'Un saluto',
+  ].join('\r\n');
+}
+
+$('email-btn').addEventListener('click', async () => {
+  const btn = $('email-btn');
+  const righe = st.filtered;
+  if (!righe.length) { toast('Nessuna libreria visibile da inviare.', true); return; }
+  btn.disabled = true;
+  try {
+    // Con il filtro su un agente scrive solo a lui, anche se alcune librerie hanno un secondo agente
+    const scelto = $('f-agente').value;
+    const coinvolti = scelto && scelto !== SENZA_AGENTE ? [scelto] : [...new Set(righe.flatMap(r => r._agenti))];
+    if (!coinvolti.length) { toast('Le librerie visibili non hanno un agente a cui scrivere.', true); return; }
+    const { data, error } = await sb.rpc('indie_rivista_email_agenti');
+    if (error) throw error;
+    const emailDi = new Map(data.map(x => [x.nome, x.email]));
+    const senzaEmail = coinvolti.filter(nome => !emailDi.has(nome));
+    const indirizzi = [...new Set(coinvolti.filter(nome => emailDi.has(nome)).map(nome => emailDi.get(nome)))];
+    if (!indirizzi.length) { toast('Nessun indirizzo email trovato per questi agenti.', true); return; }
+
+    await caricaExcelJS();
+    // Nell'allegato le librerie sono raggruppate per agente
+    const ordinate = [...righe].sort((x, y) => (!x._agente - !y._agente) || x._agente.localeCompare(y._agente, 'it'));
+    const buf = await creaExcel(ordinate, true).xlsx.writeBuffer();
+    const nome = nomeFileDistribuzione();
+    const n = numeroAperto();
+    const eml = creaEml({
+      a:indirizzi,
+      oggetto:`Distribuzione rivista${n ? ' - ' + n.titolo : ''}`,
+      testo:testoEmail(),
+      allegato:new Uint8Array(buf),
+      nomeAllegato:nome + '.xlsx',
+    });
+    scaricaFile(new Blob([eml], { type:'message/rfc822' }), nome + '.eml');
+
+    const fuori = righe.filter(r => !r._agenti.length).length;
+    const avvisi = [];
+    if (senzaEmail.length) avvisi.push(`Senza indirizzo: ${senzaEmail.join(', ')}.`);
+    if (fuori) avvisi.push(`${fmt(fuori)} librerie senza agente sono comunque nell'allegato.`);
+    toast(`Bozza pronta per ${indirizzi.length} ${indirizzi.length === 1 ? 'agente' : 'agenti'}: apri il file scaricato. ${avvisi.join(' ')}`.trim(), !!senzaEmail.length, 9000);
+  } catch (e) {
+    console.error(e);
+    toast('Bozza non preparata: ' + (e.message || e), true);
   } finally {
     btn.disabled = false;
   }
