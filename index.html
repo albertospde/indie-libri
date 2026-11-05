@@ -620,7 +620,7 @@ function rigaHtml(r){
     <td class="dati">${esc(r.cap || '')}</td>
     <td class="dati">${esc(r.citta || '')}</td>
     <td class="dati">${esc(r.provincia || '')}</td>
-    <td class="dati agente">${r._agente ? esc(r._agente) : '<span class="senza">—</span>'}</td>
+    <td class="dati agente">${r._agente ? esc(r._agente) : '<span class="senza">—</span>'}${r._agente && r.agente_da_piva ? '<span class="chip nota" title="Trovato tramite la partita IVA: su questo codice cliente non c\'è un agente">da P.IVA</span>' : ''}</td>
     <td><span class="badge ${s.c}">${esc(s.lab)}</span>${r.stato === 'S' && r.motivo ? `<span class="motivo">${esc(r.motivo)}</span>` : ''}${s.c === 'N' ? `<button class="link-btn" type="button" data-azione="collega" data-id="${r.id}">Collega</button>` : ''}</td>
     <td class="copie">${selectCopie(r)}</td>
     <td class="conf">${cellaConferma(r)}</td>
