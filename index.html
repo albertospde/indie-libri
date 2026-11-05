@@ -85,24 +85,6 @@
   .tot-bar .cap{ font-size:13.5px; color:var(--text-dim); margin-top:6px; }
   @media (max-width:760px){ .tot-card{ position:static; } .totalone .value{ font-size:40px; } }
 
-  /* ---------- NUMERO DELLA RIVISTA ---------- */
-  .numero-card{ display:flex; flex-wrap:wrap; gap:12px 18px; align-items:flex-end; }
-  .numero-card .sel{ min-width:190px; }
-  .numero-card .inf{ flex:1; min-width:220px; font-size:14.5px; color:var(--text-dim); align-self:center; }
-  .numero-card .inf b{ color:var(--text); }
-  /* ---------- FIERE E SALONI ---------- */
-  .card h2.tit{ margin:0 0 4px; font-size:18px; font-weight:700; }
-  .card .hint{ font-size:13.5px; color:var(--text-dim); margin:0 0 12px; }
-  .interne-form{ display:grid; grid-template-columns:2fr 1fr 110px 2fr auto; gap:10px; align-items:end; }
-  @media (max-width:760px){ .interne-form{ grid-template-columns:1fr 1fr; } .interne-form .f-dest,.interne-form .f-note{ grid-column:1 / -1; } }
-  #interne-tab{ min-width:0; margin-top:12px; }
-  #interne-tab td.num,#interne-tab th.num{ text-align:right; font-variant-numeric:tabular-nums; }
-  #interne-tab tfoot td{ font-weight:800; border-bottom:0; }
-  .modal .campi{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .modal .campi .largo{ grid-column:1 / -1; }
-  .modal .azioni{ display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
-  .modal .azioni .spacer{ flex:1; }
-  .btn-danger{ color:var(--danger); }
   /* ---------- FILTRI E INDICATORI ---------- */
   .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:12px; }
   .toolbar .spacer{ flex:1; }
@@ -217,13 +199,6 @@
     <div id="section-rivista" style="display:none;">
       <h1 class="sezione-titolo">Distribuzione Rivista</h1>
 
-      <div class="card numero-card">
-        <div class="sel"><label for="numero-sel">Numero della rivista</label><select id="numero-sel"></select></div>
-        <div class="inf" id="numero-inf"></div>
-        <button class="btn-secondary" id="numero-mod" type="button">✎ Modifica</button>
-        <button class="btn-primary" id="numero-new" type="button" style="padding:9px 14px;font-size:14.5px;">＋ Nuovo numero</button>
-      </div>
-
       <div class="card tot-card">
         <div class="totalone">
           <div class="label">Copie distribuite</div>
@@ -234,19 +209,6 @@
           <div class="track"><div class="fill" id="tot-fill"></div></div>
           <div class="cap" id="tot-cap">—</div>
         </div>
-      </div>
-
-      <div class="card">
-        <h2 class="tit">Copie per fiere e saloni</h2>
-        <p class="hint">Le copie che tieni per noi su questo numero. Entrano nel totale delle distribuite.</p>
-        <form class="interne-form" id="interne-form">
-          <div class="f-dest"><label for="i-dest">Fiera o salone *</label><input id="i-dest" type="text" autocomplete="off" /></div>
-          <div><label for="i-data">Data</label><input id="i-data" type="date" /></div>
-          <div><label for="i-copie">Copie *</label><input id="i-copie" type="number" min="0" step="1" /></div>
-          <div class="f-note"><label for="i-note">Note</label><input id="i-note" type="text" autocomplete="off" /></div>
-          <button class="btn-primary" type="submit" style="padding:10px 14px;font-size:14.5px;">＋ Aggiungi</button>
-        </form>
-        <div class="tab-wrap"><table id="interne-tab"><tbody id="interne-body"></tbody><tfoot id="interne-foot"></tfoot></table></div>
       </div>
 
       <div class="card">
@@ -305,24 +267,6 @@
   </div>
 </div>
 
-<div class="modal-bg" id="numero-modal">
-  <form class="modal" id="numero-form" role="dialog" aria-modal="true" aria-labelledby="numero-tit">
-    <h3><span id="numero-tit">Nuovo numero</span><button class="x-btn" id="numero-close" type="button" aria-label="Chiudi">×</button></h3>
-    <p class="hint" id="numero-hint"></p>
-    <div class="campi">
-      <div><label for="n-titolo">N° rivista *</label><input id="n-titolo" type="text" placeholder="N° 2" autocomplete="off" /></div>
-      <div><label for="n-uscita">Uscita</label><input id="n-uscita" type="date" /></div>
-      <div class="largo"><label for="n-descr">Descrizione</label><input id="n-descr" type="text" autocomplete="off" /></div>
-      <div><label for="n-previste">Copie previste</label><input id="n-previste" type="number" min="0" step="1" /></div>
-    </div>
-    <div class="azioni">
-      <button class="btn-secondary btn-danger" id="numero-del" type="button">Elimina numero</button>
-      <span class="spacer"></span>
-      <button class="btn-primary" type="submit" style="padding:10px 18px;font-size:15px;">Salva</button>
-    </div>
-  </form>
-</div>
-
 <div id="toast" role="status"></div>
 
 <script>
@@ -333,9 +277,6 @@ const SUPABASE_URL = "https://tdflwenlylhctxssatax.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkZmx3ZW5seWxoY3R4c3NhdGF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMzgyNzYsImV4cCI6MjA5MTkxNDI3Nn0.l35qEL7LOvyYuI1McQlVqj4vbyTqmlevcmqWbTGYi2Q";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const TAB = 'indie_rivista_librerie';
-const TAB_DIST = 'indie_rivista_distribuzione';
-const TAB_NUM = 'indie_rivista_numeri';
-const TAB_INT = 'indie_rivista_copie_interne';
 const COPIE_DEFAULT = 50;
 const COPIE_OPZIONI = [0, 25, 50, 75, 100, 150, 200, 300, 400, 500];
 
@@ -460,7 +401,7 @@ const COLS = [
   { key:'_conf',           label:'Conferma' },
   { key:null,              label:'' },
 ];
-const st = { numeri:[], numeroId:null, interne:[], rows:[], filtered:[], sortKey:'provincia', sortDir:1, busy:new Set(), altro:new Set(), collegaId:null };
+const st = { rows:[], filtered:[], sortKey:'provincia', sortDir:1, busy:new Set(), altro:new Set(), collegaId:null };
 
 function statoDi(r){
   if (!r.in_anagrafica) return { c:'N', lab:'Non in anagrafica' };
@@ -484,43 +425,12 @@ function segnaDoppioni(){
   st.rows.forEach(r => { r._dup = conta.get(chiave(r)) > 1; });
 }
 
-const numeroAperto = () => st.numeri.find(n => n.id === st.numeroId) || null;
-const fmtData = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '';
-
-function disegnaNumero(){
-  const sel = $('numero-sel');
-  sel.innerHTML = st.numeri.map(n => `<option value="${n.id}">${esc(n.titolo)}</option>`).join('');
-  sel.value = String(st.numeroId ?? '');
-  const n = numeroAperto();
-  const parti = [];
-  if (n?.uscita) parti.push(`Uscita <b>${esc(fmtData(n.uscita))}</b>`);
-  if (n?.descrizione) parti.push(esc(n.descrizione));
-  $('numero-inf').innerHTML = parti.join(' · ');
-  $('numero-mod').disabled = !n;
-}
-
-// Carica i numeri; senza scelta resta su quello aperto, altrimenti va sull'ultimo creato
-async function caricaNumeri(scegli){
-  const { data, error } = await sb.from(TAB_NUM).select('*').order('created_at', { ascending:false }).order('id', { ascending:false });
-  if (error) throw error;
-  st.numeri = data;
-  const voluto = scegli ?? st.numeroId;
-  st.numeroId = data.some(n => n.id === voluto) ? voluto : (data[0]?.id ?? null);
-  disegnaNumero();
-}
-
-async function caricaElenco(scegli){
+async function caricaElenco(){
   $('sync-line').textContent = 'Caricamento…';
   try {
-    await caricaNumeri(scegli);
-    const in_ = st.numeroId == null ? { data:[], error:null } : await sb.from(TAB_INT).select('*').eq('numero_id', st.numeroId).order('created_at').order('id');
-    if (in_.error) throw in_.error;
-    st.interne = in_.data;
-    disegnaInterne();
     const all = [];
     for (let from = 0; ; from += 1000) {
-      if (st.numeroId == null) break;
-      const { data, error } = await sb.rpc('indie_rivista_lista_numero', { p_numero:st.numeroId }).range(from, from + 999);
+      const { data, error } = await sb.rpc('indie_rivista_lista').range(from, from + 999);
       if (error) throw error;
       all.push(...data);
       if (data.length < 1000) break;
@@ -646,17 +556,14 @@ function ridisegnaRiga(r){
 
 function disegnaTotali(){
   const R = st.rows;
-  const inLibreria = R.reduce((t, r) => t + (r.copie_confermate || 0), 0);
-  const interne = st.interne.reduce((t, i) => t + i.copie, 0);
-  const distribuite = inLibreria + interne;
-  const daElenco = R.reduce((t, r) => t + r.copie, 0);
-  const previste = numeroAperto()?.copie_previste ?? daElenco;
+  const distribuite = R.reduce((t, r) => t + (r.copie_confermate || 0), 0);
+  const previste = R.reduce((t, r) => t + r.copie, 0);
   const confermate = R.filter(r => r.copie_confermate != null).length;
   const pct = previste ? Math.min(100, Math.round(distribuite / previste * 100)) : 0;
   $('tot-distribuite').textContent = fmt(distribuite);
-  $('tot-sub').textContent = `su ${fmt(previste)} previste · ${fmt(inLibreria)} in libreria + ${fmt(interne)} per fiere e saloni`;
+  $('tot-sub').textContent = `su ${fmt(previste)} previste`;
   $('tot-fill').style.width = pct + '%';
-  $('tot-cap').textContent = `${fmt(confermate)} ${confermate === 1 ? "libreria confermata" : "librerie confermate"} su ${fmt(R.length)} · ${pct}% delle copie · ${fmt(daElenco)} assegnate in elenco`;
+  $('tot-cap').textContent = `${fmt(confermate)} ${confermate === 1 ? "libreria confermata" : "librerie confermate"} su ${fmt(R.length)} · ${pct}% delle copie`;
 
   const n = c => R.filter(r => r._st.c === c).length;
   const kpi = [
@@ -683,7 +590,6 @@ function disegnaTotali(){
 }
 
 const rigaPerId = id => st.rows.find(r => r.id === Number(id));
-const aggiornaDist = (r, patch) => sb.from(TAB_DIST).update(patch).eq('numero_id', st.numeroId).eq('libreria_id', r.id);
 
 /* ---------- COPIE (tendina) ---------- */
 async function salvaCopie(r, valore){
@@ -691,7 +597,7 @@ async function salvaCopie(r, valore){
   r.copie = valore;
   ridisegnaRiga(r);
   disegnaTotali();
-  const { error } = await aggiornaDist(r, { copie:valore });
+  const { error } = await sb.from(TAB).update({ copie:valore }).eq('id', r.id);
   if (error) {
     r.copie = prima;
     ridisegnaRiga(r);
@@ -712,7 +618,7 @@ async function conferma(r){
   st.busy.add(r.id);
   ridisegnaRiga(r);
   const patch = patchConferma(r);
-  const { error } = await aggiornaDist(r, patch);
+  const { error } = await sb.from(TAB).update(patch).eq('id', r.id);
   st.busy.delete(r.id);
   if (error) toast('Conferma non salvata: ' + error.message, true);
   else { Object.assign(r, patch); prepara(r); }
@@ -722,7 +628,7 @@ async function conferma(r){
 async function annullaConferma(r){
   if (!window.confirm(`Annullo la conferma di ${r.ragione_sociale}? Le copie escono dal totale.`)) return;
   const patch = { copie_confermate:null, confermata_il:null, confermata_da:null };
-  const { error } = await aggiornaDist(r, patch);
+  const { error } = await sb.from(TAB).update(patch).eq('id', r.id);
   if (error) { toast('Non riuscito: ' + error.message, true); return; }
   Object.assign(r, patch);
   prepara(r);
@@ -744,7 +650,7 @@ async function confermaVisibili(){
     btn.textContent = `Conferma… ${i}/${daFare.length}`;
     await Promise.all(daFare.slice(i, i + 15).map(async r => {
       const patch = patchConferma(r);
-      const { error } = await aggiornaDist(r, patch);
+      const { error } = await sb.from(TAB).update(patch).eq('id', r.id);
       if (error) { ko++; return; }
       Object.assign(r, patch);
       prepara(r);
@@ -760,8 +666,8 @@ async function confermaVisibili(){
 /* ---------- TOGLI ---------- */
 async function togli(r){
   const extra = r.copie_confermate != null ? `\nAveva ${r.copie_confermate} copie confermate: escono dal totale.` : '';
-  if (!window.confirm(`Tolgo ${r.ragione_sociale} dall'elenco di questo numero?${extra}`)) return;
-  const { error } = await sb.from(TAB_DIST).delete().eq('numero_id', st.numeroId).eq('libreria_id', r.id);
+  if (!window.confirm(`Tolgo ${r.ragione_sociale} dall'elenco?${extra}`)) return;
+  const { error } = await sb.from(TAB).delete().eq('id', r.id);
   if (error) { toast('Non riuscito: ' + error.message, true); return; }
   st.rows = st.rows.filter(x => x.id !== r.id);
   segnaDoppioni();
@@ -826,103 +732,6 @@ $('reset-btn').addEventListener('click', () => {
 });
 $('conferma-tutte-btn').addEventListener('click', confermaVisibili);
 
-/* ---------- NUMERI DELLA RIVISTA ---------- */
-let numeroInModifica = null;
-function apriNumero(n){
-  numeroInModifica = n;
-  $('numero-tit').textContent = n ? `Modifica ${n.titolo}` : 'Nuovo numero';
-  const base = numeroAperto();
-  $('numero-hint').textContent = n ? '' : (base ? `Parte dall'elenco e dalle copie di ${base.titolo}, senza conferme.` : '');
-  $('n-titolo').value = n?.titolo || '';
-  $('n-uscita').value = n?.uscita || '';
-  $('n-descr').value = n?.descrizione || '';
-  $('n-previste').value = n?.copie_previste ?? '';
-  $('numero-del').style.display = n ? '' : 'none';
-  $('numero-modal').classList.add('open');
-  $('n-titolo').focus();
-}
-function chiudiNumero(){ $('numero-modal').classList.remove('open'); }
-$('numero-new').addEventListener('click', () => apriNumero(null));
-$('numero-mod').addEventListener('click', () => { const n = numeroAperto(); if (n) apriNumero(n); });
-$('numero-close').addEventListener('click', chiudiNumero);
-$('numero-modal').addEventListener('click', e => { if (e.target === $('numero-modal')) chiudiNumero(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') chiudiNumero(); });
-$('numero-sel').addEventListener('change', e => { st.altro.clear(); caricaElenco(Number(e.target.value)); });
-$('numero-form').addEventListener('submit', async e => {
-  e.preventDefault();
-  const titolo = $('n-titolo').value.trim();
-  if (!titolo) { toast('Scrivi il numero della rivista.', true); return; }
-  const prev = $('n-previste').value.trim();
-  const previste = prev === '' ? null : Number(prev);
-  if (previste !== null && (!Number.isInteger(previste) || previste < 0)) { toast('Le copie previste devono essere un numero intero.', true); return; }
-  const uscita = $('n-uscita').value || null, descrizione = $('n-descr').value.trim() || null;
-  if (numeroInModifica) {
-    const { error } = await sb.from(TAB_NUM).update({ titolo, uscita, descrizione, copie_previste:previste }).eq('id', numeroInModifica.id);
-    if (error) { toast('Non salvato: ' + error.message, true); return; }
-    chiudiNumero();
-    await caricaElenco();
-    toast('Numero aggiornato.');
-    return;
-  }
-  const { data, error } = await sb.rpc('indie_rivista_crea_numero', { p_titolo:titolo, p_uscita:uscita, p_descrizione:descrizione, p_copie_previste:previste, p_copia_da:st.numeroId });
-  if (error) { toast('Non creato: ' + error.message, true); return; }
-  chiudiNumero();
-  st.altro.clear();
-  await caricaElenco(data);
-  toast(`${titolo} creato.`);
-});
-$('numero-del').addEventListener('click', async () => {
-  const n = numeroInModifica;
-  if (!n) return;
-  if (st.numeri.length === 1) { toast('È l\'unico numero: non si può eliminare.', true); return; }
-  // Un numero con dati registrati non si elimina: si perderebbero le conferme
-  if (st.rows.some(r => r.copie_confermate != null) || st.interne.length) { toast('Questo numero ha conferme o copie per fiere: prima vanno annullate.', true); return; }
-  if (!window.confirm(`Elimino ${n.titolo}? L'elenco delle librerie degli altri numeri non cambia.`)) return;
-  const { error } = await sb.from(TAB_NUM).delete().eq('id', n.id);
-  if (error) { toast('Non eliminato: ' + error.message, true); return; }
-  chiudiNumero();
-  st.numeroId = null;
-  await caricaElenco();
-  toast('Numero eliminato.');
-});
-
-/* ---------- COPIE PER FIERE E SALONI ---------- */
-function disegnaInterne(){
-  const tot = st.interne.reduce((t, i) => t + i.copie, 0);
-  $('interne-body').innerHTML = st.interne.map(i => `<tr>
-    <td class="nome">${esc(i.destinazione)}</td><td>${esc(fmtData(i.data_evento))}</td><td class="num">${fmt(i.copie)}</td><td>${esc(i.note || '')}</td>
-    <td style="width:1%;"><button class="icon-btn" type="button" data-interna="${i.id}" title="Togli" aria-label="Togli ${esc(i.destinazione)}">🗑</button></td>
-  </tr>`).join('');
-  $('interne-foot').innerHTML = st.interne.length ? `<tr><td colspan="2">Totale</td><td class="num">${fmt(tot)}</td><td colspan="2"></td></tr>` : '';
-}
-$('interne-form').addEventListener('submit', async e => {
-  e.preventDefault();
-  if (st.numeroId == null) return;
-  const destinazione = $('i-dest').value.trim();
-  const copie = Number($('i-copie').value);
-  if (!destinazione) { toast('Scrivi la fiera o il salone.', true); return; }
-  if ($('i-copie').value === '' || !Number.isInteger(copie) || copie < 0) { toast('Le copie devono essere un numero intero.', true); return; }
-  const riga = { numero_id:st.numeroId, destinazione, copie, data_evento:$('i-data').value || null, note:$('i-note').value.trim() || null, inserita_da:currentUser?.email || null };
-  const { data, error } = await sb.from(TAB_INT).insert(riga).select('*').single();
-  if (error) { toast('Non aggiunta: ' + error.message, true); return; }
-  st.interne.push(data);
-  $('interne-form').reset();
-  disegnaInterne();
-  disegnaTotali();
-  $('i-dest').focus();
-});
-$('interne-body').addEventListener('click', async e => {
-  const b = e.target.closest('button[data-interna]');
-  if (!b) return;
-  const i = st.interne.find(x => x.id === Number(b.dataset.interna));
-  if (!i || !window.confirm(`Tolgo ${i.destinazione} (${fmt(i.copie)} copie)?`)) return;
-  const { error } = await sb.from(TAB_INT).delete().eq('id', i.id);
-  if (error) { toast('Non riuscito: ' + error.message, true); return; }
-  st.interne = st.interne.filter(x => x.id !== i.id);
-  disegnaInterne();
-  disegnaTotali();
-});
-
 /* ---------- ESPORTA ---------- */
 // Libreria caricata solo al primo export: serve solo qui e pesa quasi 1 MB
 const EXCELJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
@@ -980,15 +789,13 @@ function creaExcel(righe){
 
   const distribuite = righe.reduce((t, r) => t + (r.copie_confermate || 0), 0);
   const previste = righe.reduce((t, r) => t + r.copie, 0);
-  const uscitaTxt = numeroAperto()?.uscita ? `Uscita ${fmtData(numeroAperto().uscita)}  ·  ` : '';
   const confermate = righe.filter(r => r.copie_confermate != null).length;
   const filtri = descriviFiltri();
 
   // Fascia del titolo
   ws.mergeCells(1, 1, 1, COL.length);
   const t = ws.getCell(1, 1);
-  const numero = numeroAperto();
-  t.value = numero ? `Distribuzione Rivista - ${numero.titolo}` : 'Distribuzione Rivista';
+  t.value = 'Distribuzione Rivista';
   t.font = { name:'Calibri', size:20, bold:true, color:{ argb:XL.bianco } };
   t.fill = riempi(XL.scuro);
   t.alignment = { vertical:'middle', indent:1 };
@@ -997,7 +804,7 @@ function creaExcel(righe){
   ws.mergeCells(2, 1, 2, COL.length);
   const s = ws.getCell(2, 1);
   const lib = n => `${fmt(n)} ${n === 1 ? 'libreria' : 'librerie'}`;
-  s.value = `${uscitaTxt}${fmt(distribuite)} copie confermate su ${fmt(previste)} assegnate  ·  ${lib(confermate)} su ${fmt(righe.length)} ${confermate === 1 ? 'confermata' : 'confermate'}`
+  s.value = `${fmt(distribuite)} copie distribuite su ${fmt(previste)} previste  ·  ${lib(confermate)} su ${fmt(righe.length)} ${confermate === 1 ? 'confermata' : 'confermate'}`
     + `  ·  Esportato il ${new Date().toLocaleDateString('it-IT')}${filtri.length ? '  ·  Filtri: ' + filtri.join(', ') : ''}`;
   s.font = { name:'Calibri', size:12, color:{ argb:XL.bianco } };
   s.fill = riempi(XL.medio);
@@ -1075,54 +882,7 @@ function creaExcel(righe){
     c.numFmt = '#,##0';
   });
   if (righe.length) ws.autoFilter = { from:{ row:HEAD, column:1 }, to:{ row:ultimo, column:COL.length } };
-  aggiungiFoglioInterne(wb);
   return wb;
-}
-
-function aggiungiFoglioInterne(wb){
-  if (!st.interne.length) return;
-  const ws = wb.addWorksheet('Fiere e saloni', { views:[{ state:'frozen', ySplit:2, showGridLines:false }] });
-  ws.columns = [{ width:36 }, { width:13 }, { width:10 }, { width:40 }];
-  ws.mergeCells(1, 1, 1, 4);
-  const t = ws.getCell(1, 1);
-  t.value = `Copie per fiere e saloni${numeroAperto() ? ' - ' + numeroAperto().titolo : ''}`;
-  t.font = { name:'Calibri', size:16, bold:true, color:{ argb:XL.bianco } };
-  t.fill = riempi(XL.scuro);
-  t.alignment = { vertical:'middle', indent:1 };
-  ws.getRow(1).height = 30;
-  const lato = { style:'thin', color:{ argb:XL.bordo } };
-  const bordi = { top:lato, left:lato, bottom:lato, right:lato };
-  const head = ws.getRow(2);
-  head.values = ['Fiera o salone', 'Data', 'Copie', 'Note'];
-  head.height = 24;
-  head.eachCell(c => {
-    c.font = { name:'Calibri', size:11, bold:true, color:{ argb:XL.bianco } };
-    c.fill = riempi(XL.medio);
-    c.alignment = { vertical:'middle', horizontal:'center' };
-    c.border = bordi;
-  });
-  st.interne.forEach((x, i) => {
-    let quando = null;
-    if (x.data_evento) { const [a, m, g] = x.data_evento.split('-').map(Number); quando = new Date(Date.UTC(a, m - 1, g)); }
-    const row = ws.addRow([x.destinazione, quando, x.copie, x.note || '']);
-    row.eachCell({ includeEmpty:true }, c => {
-      c.font = { name:'Calibri', size:11, color:{ argb:XL.testo } };
-      c.fill = riempi(i % 2 ? XL.chiaro : XL.bianco);
-      c.border = bordi;
-    });
-    row.getCell(1).font = { name:'Calibri', size:11, bold:true, color:{ argb:XL.testo } };
-    row.getCell(2).numFmt = 'dd/mm/yyyy';
-    row.getCell(2).alignment = { horizontal:'center' };
-    row.getCell(3).numFmt = '#,##0';
-  });
-  const tot = ws.addRow(['TOTALE', null, { formula:`SUM(C3:C${2 + st.interne.length})`, result:st.interne.reduce((t, x) => t + x.copie, 0) }, null]);
-  tot.height = 24;
-  for (let n = 1; n <= 4; n++) {
-    const c = tot.getCell(n);
-    c.fill = riempi(XL.scuro);
-    c.font = { name:'Calibri', size:12, bold:true, color:{ argb:XL.bianco } };
-  }
-  tot.getCell(3).numFmt = '#,##0';
 }
 
 $('export-btn').addEventListener('click', async () => {
@@ -1134,8 +894,7 @@ $('export-btn').addEventListener('click', async () => {
     const url = URL.createObjectURL(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     const a = document.createElement('a');
     a.href = url;
-    const parte = (numeroAperto()?.titolo || '').normalize('NFD').replace(/[^A-Za-z0-9]+/g, '').slice(0, 30);
-    a.download = `IndieLibri_DistribuzioneRivista_${parte ? parte + '_' : ''}${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = `IndieLibri_DistribuzioneRivista_${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1166,7 +925,7 @@ function chiudiModale(){ $('add-modal').classList.remove('open'); }
 function apriCollega(r){
   apriModale('Collega all\'anagrafica', `Sul file: ${r.nome_file} - ${r.indirizzo_file || ''} - ${r.citta || ''}`, r.nome_file.split(/\s+/).slice(0, 2).join(' '), r.id);
 }
-$('add-btn').addEventListener('click', () => st.numeroId != null && apriModale('Aggiungi libreria', `Cerca nelle anagrafiche di BookUp. Parte con ${COPIE_DEFAULT} copie, poi le cambi dalla tendina.`, '', null));
+$('add-btn').addEventListener('click', () => apriModale('Aggiungi libreria', `Cerca nelle anagrafiche di BookUp. Parte con ${COPIE_DEFAULT} copie, poi le cambi dalla tendina.`, '', null));
 $('add-close').addEventListener('click', chiudiModale);
 $('add-modal').addEventListener('click', e => { if (e.target === $('add-modal')) chiudiModale(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') chiudiModale(); });
@@ -1178,7 +937,7 @@ async function cercaAnagrafica(){
   const box = $('add-ris');
   if (q.length < 2) { box.innerHTML = ''; return; }
   const n = ++cercaN;
-  const { data, error } = await sb.rpc('indie_rivista_cerca_anagrafica', { q, p_numero:st.numeroId });
+  const { data, error } = await sb.rpc('indie_rivista_cerca_anagrafica', { q });
   if (n !== cercaN) return;
   if (error) { box.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(error.message)}</p>`; return; }
   if (!data.length) { box.innerHTML = '<p class="hint">Nessun cliente trovato.</p>'; return; }
@@ -1195,20 +954,11 @@ async function cercaAnagrafica(){
     if (st.collegaId) collega(st.collegaId, a); else aggiungi(a);
   }));
 }
-// Una libreria gia' usata in un altro numero viene riusata, cosi' non si creano doppioni
 async function aggiungi(a){
-  const { data:esistenti, error:e1 } = await sb.from(TAB).select('id').eq('codice_cliente', a.codice_cliente).order('id').limit(1);
-  if (e1) { toast('Non aggiunta: ' + e1.message, true); return; }
-  let libreriaId = esistenti[0]?.id;
-  if (!libreriaId) {
-    const { data, error:e2 } = await sb.from(TAB).insert({
-      codice_cliente:a.codice_cliente, ragione_sociale:a.ragione_sociale, indirizzo:a.indirizzo, cap:a.cap, citta:a.citta, provincia:a.provincia,
-      copie:COPIE_DEFAULT, abbinamento:'manuale',
-    }).select('id').single();
-    if (e2) { toast('Non aggiunta: ' + e2.message, true); return; }
-    libreriaId = data.id;
-  }
-  const { error } = await sb.from(TAB_DIST).insert({ numero_id:st.numeroId, libreria_id:libreriaId, copie:COPIE_DEFAULT });
+  const { error } = await sb.from(TAB).insert({
+    codice_cliente:a.codice_cliente, ragione_sociale:a.ragione_sociale, indirizzo:a.indirizzo, cap:a.cap, citta:a.citta, provincia:a.provincia,
+    copie:COPIE_DEFAULT, abbinamento:'manuale',
+  });
   if (error) { toast('Non aggiunta: ' + error.message, true); return; }
   chiudiModale();
   await caricaElenco();
@@ -1225,11 +975,9 @@ $('m-save').addEventListener('click', async () => {
   const nome = $('m-nome').value.trim();
   if (!nome) { toast('Scrivi almeno il nome della libreria.', true); return; }
   const v = id => $(id).value.trim() || null;
-  const { data:nuova, error:e1 } = await sb.from(TAB).insert({
+  const { error } = await sb.from(TAB).insert({
     ragione_sociale:nome, indirizzo:v('m-ind'), cap:v('m-cap'), citta:v('m-citta'), provincia:(v('m-prov') || '').toUpperCase() || null, copie:COPIE_DEFAULT,
-  }).select('id').single();
-  if (e1) { toast('Non aggiunta: ' + e1.message, true); return; }
-  const { error } = await sb.from(TAB_DIST).insert({ numero_id:st.numeroId, libreria_id:nuova.id, copie:COPIE_DEFAULT });
+  });
   if (error) { toast('Non aggiunta: ' + error.message, true); return; }
   chiudiModale();
   await caricaElenco();
