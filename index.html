@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Indie Libri | PDE</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bree+Serif&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://albertospde.github.io/pde-hub/assets/pde-app-logo.css">
+<style>
+  :root{
+    --bg:#f4f7fb; --card:#ffffff; --card-2:#eef4fa; --cyan:#0090c8; --cyan-dim:#e3f3fb;
+    --text:#132033; --text-dim:#5b6b7d; --border:#d7e0ea;
+    --danger:#c62828; --danger-bg:#fdeceb; --ok:#1a7f37; --ok-bg:#e9f7ee;
+    --warn-bg:#fff4e0; --warn-text:#8a5300; --muted-bg:#f0f0f0;
+    --fascia:rgba(255,255,255,.80); --a1:#0d9488; --a2:#0f766e;
+  }
+  html[data-theme="dark"]{
+    --bg:#0f1733; --card:#18224a; --card-2:#1f2a58; --cyan:#4cc3ee; --cyan-dim:#1b3a5e;
+    --text:#e8edf8; --text-dim:#a3afcb; --border:#31406f;
+    --danger:#ff8a80; --danger-bg:#4a2030; --ok:#6fdc8c; --ok-bg:#183d2c;
+    --warn-bg:#44351a; --warn-text:#ffcf7a; --muted-bg:#2b3560;
+    --fascia:rgba(22,31,71,.82); --a1:#2dd4bf; --a2:#0f766e;
+  }
+  *{ box-sizing:border-box; }
+  html{ font-size:17px; }
+  body{ margin:0; font-family:'DM Sans',-apple-system,'Segoe UI',Roboto,Arial,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; line-height:1.4; }
+  button{ cursor:pointer; font-family:inherit; }
+  input,select{ font-family:inherit; color:var(--text); background:var(--card); border:2px solid var(--border); border-radius:10px; padding:10px 12px; font-size:15px; width:100%; }
+  input:focus,select:focus{ outline:none; border-color:var(--cyan); }
+  label{ display:block; font-size:12.5px; font-weight:600; color:var(--text-dim); margin-bottom:4px; }
+  .btn-primary{ background:var(--cyan); color:#fff; border:none; border-radius:10px; padding:12px 18px; font-size:16px; font-weight:700; }
+  html[data-theme="dark"] .btn-primary{ color:#0f1733; }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .btn-primary:disabled,.btn-secondary:disabled{ opacity:.45; cursor:not-allowed; }
+  .btn-secondary{ background:var(--card); color:var(--text); border:2px solid var(--border); border-radius:10px; padding:9px 14px; font-size:14.5px; font-weight:600; }
+  .btn-secondary:hover:not(:disabled){ border-color:var(--cyan); color:var(--cyan); }
+
+  /* ---------- LOGIN ---------- */
+  #login-screen{ min-height:100vh; display:none; align-items:center; justify-content:center; padding:16px; }
+  #login-box{ background:var(--card); border:1px solid var(--border); border-radius:20px; padding:32px 36px; width:420px; max-width:100%; display:flex; flex-direction:column; gap:14px; box-shadow:0 4px 18px rgba(20,45,90,.08); }
+  #login-box .logo-wrap{ text-align:center; margin-bottom:4px; }
+  #login-box .subtitle{ margin:0 0 6px; color:var(--text-dim); font-size:15px; text-align:center; }
+  #login-error{ color:var(--danger); font-size:14px; font-weight:600; min-height:18px; }
+  .logo-box{ background:#fff; border-radius:12px; padding:6px 10px; display:inline-block; }
+
+  /* ---------- TESTATA ---------- */
+  #app{ display:none; flex-direction:column; min-height:100vh; }
+  header{ display:flex; justify-content:space-between; gap:16px; align-items:center; padding:10px 24px; border-bottom:1px solid var(--border); background:var(--fascia); backdrop-filter:blur(6px); position:relative; z-index:50; }
+  .header-right{ display:flex; align-items:center; gap:10px; }
+  #user-chip{ font-size:13.5px; color:var(--text-dim); }
+  @media (max-width:760px){ #user-chip{ display:none; } header{ padding:8px 12px; } }
+
+  /* ---------- STRUTTURA: barra laterale come BookUp ---------- */
+  main{ flex:1; padding:22px 24px; max-width:1720px; margin:0 auto; width:100%; display:grid; grid-template-columns:230px minmax(0,1fr); column-gap:26px; align-items:start; }
+  .sidebar{ position:sticky; top:16px; background:var(--card); border:1px solid var(--border); border-radius:14px; padding:12px 10px; box-shadow:0 2px 10px rgba(20,45,90,.05); }
+  .side-group{ font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-dim); padding:6px 8px; }
+  .side-item{ display:flex; align-items:center; gap:10px; width:100%; border:0; background:none; color:var(--text); border-radius:10px; padding:9px 8px; font-size:14.5px; text-align:left; font-weight:500; }
+  .side-item .ico{ width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:17px; background:var(--card-2); flex-shrink:0; }
+  .side-item.active{ background:linear-gradient(140deg,var(--a1),var(--a2)); color:#fff; font-weight:700; }
+  .side-item.active .ico{ background:rgba(255,255,255,.2); }
+  @media (max-width:1000px){ main{ grid-template-columns:minmax(0,1fr); padding:14px 16px; } .sidebar{ position:static; margin-bottom:14px; } }
+  .sezione-titolo{ margin:0 0 16px; font-family:'Bree Serif',Georgia,serif; font-size:30px; font-weight:400; color:var(--a2); text-align:center; }
+  html[data-theme="dark"] .sezione-titolo{ color:var(--a1); }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin-bottom:16px; box-shadow:0 2px 10px rgba(20,45,90,.05); }
+
+  /* ---------- TOTALONE ---------- */
+  .tot-card{ position:sticky; top:0; z-index:20; display:flex; flex-wrap:wrap; gap:18px 34px; align-items:center; }
+  .totalone .label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim); }
+  .totalone .value{ font-family:'Bree Serif',Georgia,serif; font-size:50px; line-height:1.05; color:var(--a2); font-variant-numeric:tabular-nums; }
+  html[data-theme="dark"] .totalone .value{ color:var(--a1); }
+  .totalone .sub{ font-size:14px; color:var(--text-dim); }
+  .tot-bar{ flex:1; min-width:200px; }
+  .tot-bar .track{ height:12px; border-radius:999px; background:var(--card-2); overflow:hidden; }
+  .tot-bar .fill{ height:100%; width:0; border-radius:999px; background:linear-gradient(90deg,var(--a1),var(--a2)); transition:width .25s ease; }
+  .tot-bar .cap{ font-size:13.5px; color:var(--text-dim); margin-top:6px; }
+  @media (max-width:760px){ .tot-card{ position:static; } .totalone .value{ font-size:40px; } }
+
+  /* ---------- FILTRI E INDICATORI ---------- */
+  .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:12px; }
+  .toolbar .spacer{ flex:1; }
+  .sync-line{ font-size:13px; color:var(--text-dim); }
+  .filters{ display:grid; grid-template-columns:2fr repeat(3,1fr); gap:10px; align-items:end; }
+  @media (max-width:760px){ .filters{ grid-template-columns:1fr 1fr; } .filters .f-q{ grid-column:1 / -1; } }
+  .kpis{ display:flex; gap:24px; flex-wrap:wrap; margin-top:14px; }
+  .kpi{ background:none; border:0; border-bottom:2px solid transparent; padding:0 0 2px; text-align:left; color:inherit; }
+  .kpi.on{ border-bottom-color:var(--cyan); }
+  .kpi .label{ display:block; font-size:11.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; }
+  .kpi .value{ display:block; font-size:22px; font-weight:800; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .kpi .value.warn{ color:var(--danger); }
+  .kpi .value.amb{ color:var(--warn-text); }
+
+  /* ---------- TABELLA ---------- */
+  .tab-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; min-width:1040px; }
+  th{ text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-dim); padding:8px 6px; border-bottom:2px solid var(--border); white-space:nowrap; }
+  th[data-sort]{ cursor:pointer; user-select:none; }
+  th[data-sort]:hover{ color:var(--cyan); }
+  th .arrow{ font-size:9px; color:var(--cyan); margin-left:2px; }
+  td{ padding:7px 6px; border-bottom:1px solid var(--border); font-size:13.5px; vertical-align:middle; }
+  tbody tr:nth-child(even) td{ background:var(--card-2); }
+  tbody tr:hover td{ background:var(--cyan-dim); }
+  tr.spenta td.dati{ color:var(--text-dim); }
+  td.nome{ font-weight:600; }
+  td.cod{ font-variant-numeric:tabular-nums; color:var(--text-dim); white-space:nowrap; }
+  .badge{ display:inline-block; font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .badge.A{ background:var(--ok-bg); color:var(--ok); }
+  .badge.S{ background:var(--warn-bg); color:var(--warn-text); }
+  .badge.C{ background:var(--danger-bg); color:var(--danger); }
+  .badge.N{ background:var(--muted-bg); color:var(--text-dim); }
+  .motivo{ display:block; font-size:11.5px; color:var(--text-dim); margin-top:2px; max-width:170px; }
+  .chip{ display:inline-block; font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:6px; margin-left:5px; vertical-align:1px; border:0; }
+  .chip.dup{ background:var(--danger-bg); color:var(--danger); }
+  .chip.ver{ background:var(--warn-bg); color:var(--warn-text); cursor:pointer; }
+  .chip.nota{ background:var(--cyan-dim); color:var(--cyan); }
+  .link-btn{ background:none; border:0; padding:0; color:var(--cyan); font-size:12px; font-weight:700; text-decoration:underline; margin-top:2px; display:block; }
+  td.copie select,td.copie input{ width:92px; padding:6px 8px; font-size:15px; font-weight:700; text-align:left; }
+  td.conf{ white-space:nowrap; }
+  .btn-conf{ border:0; border-radius:8px; padding:7px 12px; font-size:13.5px; font-weight:700; background:var(--cyan); color:#fff; min-width:96px; }
+  html[data-theme="dark"] .btn-conf{ color:#0f1733; }
+  .btn-conf.ri{ background:var(--warn-text); }
+  .btn-conf:disabled{ opacity:.5; cursor:wait; }
+  .conf-ok{ display:inline-flex; flex-direction:column; color:var(--ok); font-weight:800; font-size:13.5px; line-height:1.2; vertical-align:middle; min-width:96px; }
+  .conf-ok small{ font-weight:500; font-size:11px; color:var(--text-dim); }
+  .icon-btn{ background:none; border:0; color:var(--text-dim); font-size:15px; padding:4px 6px; border-radius:6px; }
+  .icon-btn:hover{ color:var(--danger); background:var(--danger-bg); }
+  .vuoto{ text-align:center; color:var(--text-dim); padding:28px; }
+
+  /* ---------- FINESTRE ---------- */
+  .modal-bg{ position:fixed; inset:0; background:rgba(15,30,50,.45); z-index:100; display:none; align-items:flex-start; justify-content:center; padding:6vh 16px; overflow:auto; }
+  .modal-bg.open{ display:flex; }
+  .modal{ background:var(--card); border-radius:16px; width:720px; max-width:100%; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .modal h3{ margin:0 0 4px; font-size:19px; display:flex; justify-content:space-between; align-items:center; }
+  .modal .hint{ font-size:13.5px; color:var(--text-dim); margin:0 0 12px; }
+  .x-btn{ background:none; border:0; font-size:24px; line-height:1; color:var(--text-dim); }
+  .ris{ margin-top:10px; max-height:46vh; overflow:auto; }
+  .ris-row{ display:flex; gap:12px; align-items:center; padding:9px 4px; border-bottom:1px solid var(--border); font-size:14px; }
+  .ris-row .inf{ flex:1; min-width:0; }
+  .ris-row .inf small{ display:block; color:var(--text-dim); font-size:12.5px; }
+  .manuale{ display:grid; grid-template-columns:2fr 2fr 1fr; gap:10px; margin-top:10px; }
+  @media (max-width:640px){ .manuale{ grid-template-columns:1fr; } }
+  details{ margin-top:14px; font-size:14px; }
+  summary{ cursor:pointer; font-weight:600; color:var(--cyan); }
+  #toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--text); color:var(--card); padding:10px 18px; border-radius:10px; font-size:14px; font-weight:600; z-index:200; display:none; max-width:90vw; }
+  #toast.err{ background:var(--danger); color:#fff; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <form id="login-box">
+    <div class="logo-wrap"><div class="logo-box">
+      <div class="pde-logo" role="img" aria-label="Indie Libri" style="font-size:24px"><div class="pl-text"><div class="pl-name"><b>INDIE</b><span>LIBRI</span></div><div class="pl-tag"><i class="c0">LIBRERIE</i> <i class="c1">INDIPENDENTI</i></div></div><div class="pl-wing"></div></div>
+    </div></div>
+    <p class="subtitle">Entra con la stessa utenza del PDE Hub</p>
+    <input type="email" id="login-email" placeholder="La tua email" autocomplete="username" />
+    <input type="password" id="login-password" placeholder="La tua password" autocomplete="current-password" />
+    <button class="btn-primary" type="submit" id="login-btn">▶ Entra</button>
+    <div id="login-error"></div>
+  </form>
+</div>
+
+<div id="app">
+  <header>
+    <div class="logo-box">
+      <div class="pde-logo" role="img" aria-label="Indie Libri" style="font-size:20px"><div class="pl-text"><div class="pl-name"><b>INDIE</b><span>LIBRI</span></div><div class="pl-tag"><i class="c0">LIBRERIE</i> <i class="c1">INDIPENDENTI</i></div></div><div class="pl-wing"></div></div>
+    </div>
+    <div class="header-right">
+      <span id="user-chip"></span>
+      <button class="btn-secondary" id="theme-btn" type="button" title="Tema chiaro / scuro">🌙</button>
+      <button class="btn-secondary" id="logout-btn" type="button">Esci</button>
+    </div>
+  </header>
+
+  <main>
+    <nav class="sidebar" aria-label="Sezioni">
+      <div class="side-group">Rivista</div>
+      <button class="side-item active" type="button"><span class="ico">📰</span>Distribuzione Rivista</button>
+    </nav>
+
+    <div id="section-rivista">
+      <h1 class="sezione-titolo">Distribuzione Rivista</h1>
+
+      <div class="card tot-card">
+        <div class="totalone">
+          <div class="label">Copie distribuite</div>
+          <div class="value" id="tot-distribuite">0</div>
+          <div class="sub" id="tot-sub">—</div>
+        </div>
+        <div class="tot-bar">
+          <div class="track"><div class="fill" id="tot-fill"></div></div>
+          <div class="cap" id="tot-cap">—</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <span class="sync-line" id="sync-line">Caricamento…</span>
+          <span class="spacer"></span>
+          <button class="btn-secondary" id="conferma-tutte-btn" type="button">✓ Conferma le visibili</button>
+          <button class="btn-secondary" id="export-btn" type="button">📥 Esporta</button>
+          <button class="btn-secondary" id="reset-btn" type="button">↺ Reset filtri</button>
+          <button class="btn-primary" id="add-btn" type="button" style="padding:9px 14px;font-size:14.5px;">＋ Aggiungi libreria</button>
+        </div>
+        <div class="filters">
+          <div class="f-q"><label for="f-q">Cerca</label><input id="f-q" type="text" placeholder="Codice, nome, città, indirizzo…" autocomplete="off" /></div>
+          <div><label for="f-prov">Provincia</label><select id="f-prov"><option value="">Tutte</option></select></div>
+          <div><label for="f-stato">Stato libreria</label><select id="f-stato">
+            <option value="">Tutti</option><option value="A">Attive</option><option value="S">Sospese</option><option value="C">Cessate</option><option value="N">Non in anagrafica</option>
+          </select></div>
+          <div><label for="f-conf">Conferma</label><select id="f-conf">
+            <option value="">Tutte</option><option value="no">Da confermare</option><option value="si">Confermate</option><option value="ver">Abbinamento da verificare</option><option value="dup">Doppioni</option>
+          </select></div>
+        </div>
+        <div class="kpis" id="kpis"></div>
+      </div>
+
+      <div class="card">
+        <div class="tab-wrap">
+          <table id="tab">
+            <thead><tr id="tab-head"></tr></thead>
+            <tbody id="tab-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-bg" id="add-modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="add-title">
+    <h3><span id="add-title">Aggiungi libreria</span><button class="x-btn" id="add-close" type="button" aria-label="Chiudi">×</button></h3>
+    <p class="hint" id="add-hint">Cerca nelle anagrafiche di BookUp.</p>
+    <label for="add-q">Cerca</label>
+    <input id="add-q" type="text" placeholder="Nome, città, codice, P.IVA…" autocomplete="off" />
+    <div class="ris" id="add-ris"></div>
+    <details id="add-man-wrap">
+      <summary>Non è in anagrafica: inseriscila a mano</summary>
+      <div class="manuale">
+        <div><label for="m-nome">Nome *</label><input id="m-nome" /></div>
+        <div><label for="m-ind">Indirizzo</label><input id="m-ind" /></div>
+        <div><label for="m-cap">CAP</label><input id="m-cap" /></div>
+        <div><label for="m-citta">Città</label><input id="m-citta" /></div>
+        <div><label for="m-prov">Prov.</label><input id="m-prov" maxlength="8" /></div>
+        <div style="align-self:end;"><button class="btn-primary" id="m-save" type="button" style="width:100%;padding:10px;">Aggiungi</button></div>
+      </div>
+    </details>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+
+<script>
+/* =====================================================================
+   CONFIG: stesso progetto Supabase di BookUp (anagrafiche_clienti)
+   ===================================================================== */
+const SUPABASE_URL = "https://tdflwenlylhctxssatax.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkZmx3ZW5seWxoY3R4c3NhdGF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMzgyNzYsImV4cCI6MjA5MTkxNDI3Nn0.l35qEL7LOvyYuI1McQlVqj4vbyTqmlevcmqWbTGYi2Q";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const TAB = 'indie_rivista_librerie';
+const COPIE_DEFAULT = 50;
+const COPIE_OPZIONI = [0, 25, 50, 75, 100, 150, 200, 300, 400, 500];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const fmt = n => Number(n || 0).toLocaleString('it-IT');
+const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const normStretto = s => norm(s).replace(/[^a-z0-9]/g, '');
+
+let currentUser = null;
+let toastT = null;
+function toast(msg, isErr){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = isErr ? 'err' : '';
+  t.style.display = 'block';
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { t.style.display = 'none'; }, isErr ? 6000 : 2500);
+}
+
+/* ---------- TEMA ---------- */
+function applyTheme(th){
+  document.documentElement.setAttribute('data-theme', th);
+  $('theme-btn').textContent = th === 'dark' ? '☀️' : '🌙';
+}
+function storedTheme(){ try { return localStorage.getItem('indie-tema') || 'light'; } catch (_e) { return 'light'; } }
+applyTheme(storedTheme());
+$('theme-btn').addEventListener('click', () => {
+  const th = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  applyTheme(th);
+  try { localStorage.setItem('indie-tema', th); } catch (_e) {}
+});
+
+/* ---------- ACCESSO ---------- */
+async function checkSession(){
+  const { data } = await sb.auth.getSession();
+  if (data.session) showApp(data.session.user); else $('login-screen').style.display = 'flex';
+}
+function showApp(user){
+  currentUser = user;
+  $('login-screen').style.display = 'none';
+  $('app').style.display = 'flex';
+  $('user-chip').textContent = user.email || '';
+  caricaElenco();
+}
+$('login-box').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = $('login-email').value.trim(), password = $('login-password').value;
+  $('login-error').textContent = '';
+  if (!email || !password) { $('login-error').textContent = 'Inserisci email e password.'; return; }
+  $('login-btn').disabled = true;
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  $('login-btn').disabled = false;
+  if (error) { $('login-error').textContent = 'Email o password non corretti.'; return; }
+  showApp(data.user);
+});
+// Uscita locale (non signOut): non disconnette le altre app PDE sullo stesso progetto
+$('logout-btn').addEventListener('click', () => {
+  Object.keys(localStorage).filter(k => k.startsWith('sb-')).forEach(k => localStorage.removeItem(k));
+  location.reload();
+});
+
+/* =====================================================================
+   DISTRIBUZIONE RIVISTA
+   ===================================================================== */
+const COLS = [
+  { key:'codice_cliente',  label:'Codice' },
+  { key:'ragione_sociale', label:'Libreria' },
+  { key:'indirizzo',       label:'Indirizzo' },
+  { key:'cap',             label:'CAP' },
+  { key:'citta',           label:'Città' },
+  { key:'provincia',       label:'Prov.' },
+  { key:'_stato',          label:'Stato' },
+  { key:'copie',           label:'Copie' },
+  { key:'_conf',           label:'Conferma' },
+  { key:null,              label:'' },
+];
+const st = { rows:[], filtered:[], sortKey:'provincia', sortDir:1, busy:new Set(), altro:new Set(), collegaId:null };
+
+function statoDi(r){
+  if (!r.in_anagrafica) return { c:'N', lab:'Non in anagrafica' };
+  if (r.stato === 'A') return { c:'A', lab:'Attiva' };
+  if (/cessat/i.test(r.motivo || '')) return { c:'C', lab:'Cessata' };
+  return { c:'S', lab:'Sospesa' };
+}
+function prepara(r){
+  r._st = statoDi(r);
+  r._stato = r._st.lab;
+  r._conf = r.copie_confermate ?? -1;
+  r._search = norm([r.codice_cliente, r.ragione_sociale, r.nome_file, r.indirizzo, r.citta, r.provincia, r.cap, r.partita_iva, r.note].join(' '));
+  return r;
+}
+function segnaDoppioni(){
+  const conta = new Map();
+  const chiave = r => r.codice_cliente ? 'c' + r.codice_cliente : 'n' + normStretto(r.ragione_sociale) + normStretto(r.indirizzo);
+  st.rows.forEach(r => conta.set(chiave(r), (conta.get(chiave(r)) || 0) + 1));
+  st.rows.forEach(r => { r._dup = conta.get(chiave(r)) > 1; });
+}
+
+async function caricaElenco(){
+  $('sync-line').textContent = 'Caricamento…';
+  try {
+    const all = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await sb.rpc('indie_rivista_lista').range(from, from + 999);
+      if (error) throw error;
+      all.push(...data);
+      if (data.length < 1000) break;
+    }
+    st.rows = all.map(prepara);
+    segnaDoppioni();
+    riempiProvince();
+    $('sync-line').textContent = 'Dati e stato delle librerie aggiornati ogni notte dalle anagrafiche di BookUp (RPN).';
+    applicaFiltri();
+  } catch (e) {
+    console.error(e);
+    const negato = e.code === '42501';
+    $('sync-line').innerHTML = `<span style="color:var(--danger);font-weight:700;">${negato ? 'La tua utenza non è abilitata a questa sezione.' : 'Errore di caricamento: ' + esc(e.message || e)}</span>`;
+    $('tab-body').innerHTML = '';
+  }
+}
+
+function riempiProvince(){
+  const sel = $('f-prov'), cur = sel.value;
+  const prov = [...new Set(st.rows.map(r => r.provincia).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Tutte</option>' + prov.map(p => `<option>${esc(p)}</option>`).join('');
+  sel.value = prov.includes(cur) ? cur : '';
+}
+
+function applicaFiltri(){
+  const parole = norm($('f-q').value).split(/\s+/).filter(Boolean);
+  const prov = $('f-prov').value, stato = $('f-stato').value, conf = $('f-conf').value;
+  st.filtered = st.rows.filter(r => {
+    if (parole.length && !parole.every(p => r._search.includes(p))) return false;
+    if (prov && r.provincia !== prov) return false;
+    if (stato && r._st.c !== stato) return false;
+    if (conf === 'no' && r.copie_confermate != null) return false;
+    if (conf === 'si' && r.copie_confermate == null) return false;
+    if (conf === 'ver' && !r.da_verificare) return false;
+    if (conf === 'dup' && !r._dup) return false;
+    return true;
+  });
+  ordina();
+  disegnaTabella();
+  disegnaTotali();
+}
+
+function ordina(){
+  const k = st.sortKey, d = st.sortDir;
+  st.filtered.sort((a, b) => {
+    const x = a[k], y = b[k];
+    if (typeof x === 'number' && typeof y === 'number') { if (x !== y) return (x - y) * d; }
+    else { const c = String(x ?? '').localeCompare(String(y ?? ''), 'it', { numeric:true }); if (c) return c * d; }
+    return String(a.citta ?? '').localeCompare(String(b.citta ?? ''), 'it') || String(a.ragione_sociale).localeCompare(String(b.ragione_sociale), 'it');
+  });
+}
+
+function selectCopie(r){
+  if (st.altro.has(r.id)) {
+    return `<input type="number" min="0" step="1" value="${r.copie}" data-azione="copie-num" data-id="${r.id}" aria-label="Copie per ${esc(r.ragione_sociale)}" />`;
+  }
+  const opz = COPIE_OPZIONI.includes(r.copie) ? COPIE_OPZIONI : [...COPIE_OPZIONI, r.copie].sort((a, b) => a - b);
+  return `<select data-azione="copie" data-id="${r.id}" aria-label="Copie per ${esc(r.ragione_sociale)}">`
+    + opz.map(n => `<option value="${n}"${n === r.copie ? ' selected' : ''}>${n}</option>`).join('')
+    + `<option value="altro">Altro…</option></select>`;
+}
+
+function cellaConferma(r){
+  const busy = st.busy.has(r.id) ? ' disabled' : '';
+  if (r.copie_confermate == null) {
+    return `<button class="btn-conf" type="button" data-azione="conferma" data-id="${r.id}"${busy}>✓ Conferma</button>`;
+  }
+  if (r.copie_confermate !== r.copie) {
+    return `<button class="btn-conf ri" type="button" data-azione="conferma" data-id="${r.id}"${busy} title="Confermate finora: ${r.copie_confermate}">✓ Riconferma</button>
+      <button class="icon-btn" type="button" data-azione="annulla" data-id="${r.id}" title="Annulla la conferma" aria-label="Annulla la conferma">↩</button>`;
+  }
+  const quando = r.confermata_il ? new Date(r.confermata_il).toLocaleDateString('it-IT') : '';
+  return `<span class="conf-ok" title="${esc(r.confermata_da || '')}">✓ ${fmt(r.copie_confermate)} copie<small>${esc(quando)}</small></span>
+    <button class="icon-btn" type="button" data-azione="annulla" data-id="${r.id}"${busy} title="Annulla la conferma" aria-label="Annulla la conferma">↩</button>`;
+}
+
+function rigaHtml(r){
+  const s = r._st;
+  const chips = [];
+  if (r._dup) chips.push('<span class="chip dup" title="Compare più di una volta in elenco">doppione</span>');
+  if (r.da_verificare) chips.push(`<button class="chip ver" type="button" data-azione="collega" data-id="${r.id}" title="Sul file: ${esc(r.nome_file)} - ${esc(r.indirizzo_file)}. Abbinata per ${esc(r.abbinamento)}: clicca per cambiare">verifica</button>`);
+  if (r.note) chips.push(`<span class="chip nota">${esc(r.note)}</span>`);
+  return `<tr data-id="${r.id}" class="${s.c === 'S' || s.c === 'C' ? 'spenta' : ''}">
+    <td class="cod dati">${esc(r.codice_cliente || '—')}</td>
+    <td class="nome dati">${esc(r.ragione_sociale)}${chips.join('')}</td>
+    <td class="dati">${esc(r.indirizzo || '')}</td>
+    <td class="dati">${esc(r.cap || '')}</td>
+    <td class="dati">${esc(r.citta || '')}</td>
+    <td class="dati">${esc(r.provincia || '')}</td>
+    <td><span class="badge ${s.c}">${esc(s.lab)}</span>${r.stato === 'S' && r.motivo ? `<span class="motivo">${esc(r.motivo)}</span>` : ''}${s.c === 'N' ? `<button class="link-btn" type="button" data-azione="collega" data-id="${r.id}">Collega</button>` : ''}</td>
+    <td class="copie">${selectCopie(r)}</td>
+    <td class="conf">${cellaConferma(r)}</td>
+    <td><button class="icon-btn" type="button" data-azione="togli" data-id="${r.id}" title="Togli dall'elenco" aria-label="Togli ${esc(r.ragione_sociale)} dall'elenco">🗑</button></td>
+  </tr>`;
+}
+
+function disegnaTabella(){
+  $('tab-head').innerHTML = COLS.map(c => {
+    if (!c.key) return '<th></th>';
+    const arrow = st.sortKey === c.key ? `<span class="arrow">${st.sortDir > 0 ? '▲' : '▼'}</span>` : '';
+    return `<th data-sort="${c.key}">${c.label}${arrow}</th>`;
+  }).join('');
+  $('tab-body').innerHTML = st.filtered.length
+    ? st.filtered.map(rigaHtml).join('')
+    : `<tr><td colspan="${COLS.length}" class="vuoto">${st.rows.length ? 'Nessuna libreria con questi filtri.' : 'Elenco vuoto.'}</td></tr>`;
+}
+
+function ridisegnaRiga(r){
+  const tr = $('tab-body').querySelector(`tr[data-id="${r.id}"]`);
+  if (tr) tr.outerHTML = rigaHtml(r);
+}
+
+function disegnaTotali(){
+  const R = st.rows;
+  const distribuite = R.reduce((t, r) => t + (r.copie_confermate || 0), 0);
+  const previste = R.reduce((t, r) => t + r.copie, 0);
+  const confermate = R.filter(r => r.copie_confermate != null).length;
+  const pct = previste ? Math.min(100, Math.round(distribuite / previste * 100)) : 0;
+  $('tot-distribuite').textContent = fmt(distribuite);
+  $('tot-sub').textContent = `su ${fmt(previste)} previste`;
+  $('tot-fill').style.width = pct + '%';
+  $('tot-cap').textContent = `${fmt(confermate)} ${confermate === 1 ? "libreria confermata" : "librerie confermate"} su ${fmt(R.length)} · ${pct}% delle copie`;
+
+  const n = c => R.filter(r => r._st.c === c).length;
+  const kpi = [
+    { lab:'Librerie', val:R.length, f:{} },
+    { lab:'Attive', val:n('A'), f:{ stato:'A' } },
+    { lab:'Sospese', val:n('S'), f:{ stato:'S' }, cls:'amb' },
+    { lab:'Cessate', val:n('C'), f:{ stato:'C' }, cls:'warn' },
+    { lab:'Non in anagrafica', val:n('N'), f:{ stato:'N' }, cls:n('N') ? 'amb' : '' },
+    { lab:'Da confermare', val:R.length - confermate, f:{ conf:'no' } },
+    { lab:'Da verificare', val:R.filter(r => r.da_verificare).length, f:{ conf:'ver' }, cls:'amb' },
+    { lab:'Doppioni', val:R.filter(r => r._dup).length, f:{ conf:'dup' }, cls:'warn' },
+  ];
+  const curS = $('f-stato').value, curC = $('f-conf').value;
+  $('kpis').innerHTML = kpi.map((k, i) => {
+    const on = (k.f.stato || '') === curS && (k.f.conf || '') === curC && (k.f.stato || k.f.conf);
+    return `<button class="kpi${on ? ' on' : ''}" type="button" data-kpi="${i}"><span class="label">${k.lab}</span><span class="value ${k.cls || ''}">${fmt(k.val)}</span></button>`;
+  }).join('');
+  $('kpis').querySelectorAll('.kpi').forEach(b => b.addEventListener('click', () => {
+    const f = kpi[+b.dataset.kpi].f;
+    $('f-stato').value = f.stato || '';
+    $('f-conf').value = f.conf || '';
+    applicaFiltri();
+  }));
+}
+
+const rigaPerId = id => st.rows.find(r => r.id === Number(id));
+
+/* ---------- COPIE (tendina) ---------- */
+async function salvaCopie(r, valore){
+  const prima = r.copie;
+  r.copie = valore;
+  ridisegnaRiga(r);
+  disegnaTotali();
+  const { error } = await sb.from(TAB).update({ copie:valore }).eq('id', r.id);
+  if (error) {
+    r.copie = prima;
+    ridisegnaRiga(r);
+    disegnaTotali();
+    toast('Copie non salvate: ' + error.message, true);
+  }
+}
+
+/* ---------- CONFERMA ---------- */
+function patchConferma(r){
+  return { copie_confermate:r.copie, confermata_il:new Date().toISOString(), confermata_da:currentUser?.email || null };
+}
+async function conferma(r){
+  if (r._st.c === 'S' || r._st.c === 'C') {
+    const motivo = r.motivo ? ` (${r.motivo})` : '';
+    if (!window.confirm(`${r.ragione_sociale} risulta ${r._st.lab.toLowerCase()}${motivo}. Confermi lo stesso ${r.copie} copie?`)) return;
+  }
+  st.busy.add(r.id);
+  ridisegnaRiga(r);
+  const patch = patchConferma(r);
+  const { error } = await sb.from(TAB).update(patch).eq('id', r.id);
+  st.busy.delete(r.id);
+  if (error) toast('Conferma non salvata: ' + error.message, true);
+  else { Object.assign(r, patch); prepara(r); }
+  ridisegnaRiga(r);
+  disegnaTotali();
+}
+async function annullaConferma(r){
+  if (!window.confirm(`Annullo la conferma di ${r.ragione_sociale}? Le copie escono dal totale.`)) return;
+  const patch = { copie_confermate:null, confermata_il:null, confermata_da:null };
+  const { error } = await sb.from(TAB).update(patch).eq('id', r.id);
+  if (error) { toast('Non riuscito: ' + error.message, true); return; }
+  Object.assign(r, patch);
+  prepara(r);
+  ridisegnaRiga(r);
+  disegnaTotali();
+}
+async function confermaVisibili(){
+  // Le sospese e le cessate restano fuori: vanno confermate una per una
+  const daFare = st.filtered.filter(r => r.copie_confermate !== r.copie && (r._st.c === 'A' || r._st.c === 'N'));
+  const saltate = st.filtered.filter(r => r.copie_confermate !== r.copie && (r._st.c === 'S' || r._st.c === 'C')).length;
+  if (!daFare.length) { toast('Nessuna libreria da confermare tra quelle visibili.'); return; }
+  const tot = daFare.reduce((t, r) => t + r.copie, 0);
+  const avviso = saltate ? `\n\n${saltate} sospese o cessate restano fuori: vanno confermate una per una.` : '';
+  if (!window.confirm(`Confermo ${fmt(daFare.length)} librerie per ${fmt(tot)} copie?${avviso}`)) return;
+  const btn = $('conferma-tutte-btn');
+  btn.disabled = true;
+  let ok = 0, ko = 0;
+  for (let i = 0; i < daFare.length; i += 15) {
+    btn.textContent = `Conferma… ${i}/${daFare.length}`;
+    await Promise.all(daFare.slice(i, i + 15).map(async r => {
+      const patch = patchConferma(r);
+      const { error } = await sb.from(TAB).update(patch).eq('id', r.id);
+      if (error) { ko++; return; }
+      Object.assign(r, patch);
+      prepara(r);
+      ok++;
+    }));
+  }
+  btn.disabled = false;
+  btn.textContent = '✓ Conferma le visibili';
+  applicaFiltri();
+  toast(ko ? `Confermate ${ok}, ${ko} non riuscite: riprova.` : `Confermate ${fmt(ok)} librerie.`, !!ko);
+}
+
+/* ---------- TOGLI ---------- */
+async function togli(r){
+  const extra = r.copie_confermate != null ? `\nAveva ${r.copie_confermate} copie confermate: escono dal totale.` : '';
+  if (!window.confirm(`Tolgo ${r.ragione_sociale} dall'elenco?${extra}`)) return;
+  const { error } = await sb.from(TAB).delete().eq('id', r.id);
+  if (error) { toast('Non riuscito: ' + error.message, true); return; }
+  st.rows = st.rows.filter(x => x.id !== r.id);
+  segnaDoppioni();
+  riempiProvince();
+  applicaFiltri();
+  toast('Libreria tolta dall\'elenco.');
+}
+
+/* ---------- AZIONI SULLE RIGHE ---------- */
+$('tab-body').addEventListener('click', e => {
+  const el = e.target.closest('button[data-azione]');
+  if (!el) return;
+  const r = rigaPerId(el.dataset.id);
+  if (!r) return;
+  ({ conferma, annulla:annullaConferma, togli, collega:apriCollega })[el.dataset.azione]?.(r);
+});
+$('tab-body').addEventListener('change', e => {
+  const el = e.target;
+  const r = rigaPerId(el.dataset.id);
+  if (!r) return;
+  if (el.dataset.azione === 'copie') {
+    if (el.value === 'altro') {
+      st.altro.add(r.id);
+      ridisegnaRiga(r);
+      const inp = $('tab-body').querySelector(`input[data-id="${r.id}"]`);
+      inp?.focus();
+      inp?.select();
+      return;
+    }
+    salvaCopie(r, Number(el.value));
+  } else if (el.dataset.azione === 'copie-num') {
+    const v = Number(el.value);
+    st.altro.delete(r.id);
+    if (!Number.isInteger(v) || v < 0 || el.value === '') { ridisegnaRiga(r); toast('Inserisci un numero intero, 0 o più.', true); return; }
+    if (v === r.copie) { ridisegnaRiga(r); return; }
+    salvaCopie(r, v);
+  }
+});
+$('tab-body').addEventListener('keydown', e => {
+  if (e.target.dataset.azione === 'copie-num' && e.key === 'Enter') e.target.blur();
+});
+$('tab-body').addEventListener('focusout', e => {
+  // Campo "Altro" lasciato senza cambiare il numero: torna la tendina
+  const el = e.target;
+  if (el.dataset?.azione !== 'copie-num') return;
+  const r = rigaPerId(el.dataset.id);
+  if (r && Number(el.value) === r.copie && st.altro.delete(r.id)) ridisegnaRiga(r);
+});
+$('tab-head').addEventListener('click', e => {
+  const th = e.target.closest('th[data-sort]');
+  if (!th) return;
+  if (st.sortKey === th.dataset.sort) st.sortDir *= -1;
+  else { st.sortKey = th.dataset.sort; st.sortDir = 1; }
+  applicaFiltri();
+});
+['f-prov', 'f-stato', 'f-conf'].forEach(id => $(id).addEventListener('change', applicaFiltri));
+$('f-q').addEventListener('input', applicaFiltri);
+$('reset-btn').addEventListener('click', () => {
+  $('f-q').value = ''; $('f-prov').value = ''; $('f-stato').value = ''; $('f-conf').value = '';
+  applicaFiltri();
+});
+$('conferma-tutte-btn').addEventListener('click', confermaVisibili);
+
+/* ---------- ESPORTA ---------- */
+$('export-btn').addEventListener('click', () => {
+  const righe = st.filtered.map(r => ({
+    'Codice':r.codice_cliente || '', 'Libreria':r.ragione_sociale, 'Indirizzo':r.indirizzo || '', 'CAP':r.cap || '',
+    'Città':r.citta || '', 'Prov.':r.provincia || '', 'Stato':r._st.lab, 'Motivo':r.motivo || '',
+    'Copie':r.copie, 'Copie confermate':r.copie_confermate ?? '',
+    'Confermata il':r.confermata_il ? new Date(r.confermata_il).toLocaleDateString('it-IT') : '',
+    'Confermata da':r.confermata_da || '', 'Note':r.note || '',
+  }));
+  const ws = XLSX.utils.json_to_sheet(righe);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Distribuzione Rivista');
+  XLSX.writeFile(wb, `IndieLibri_DistribuzioneRivista_${new Date().toISOString().slice(0, 10)}.xlsx`);
+});
+
+/* ---------- AGGIUNGI / COLLEGA ---------- */
+function apriModale(titolo, hint, q, collegaId){
+  st.collegaId = collegaId;
+  $('add-title').textContent = titolo;
+  $('add-hint').textContent = hint;
+  $('add-q').value = q || '';
+  $('add-ris').innerHTML = '';
+  $('add-man-wrap').style.display = collegaId ? 'none' : '';
+  $('add-man-wrap').open = false;
+  ['m-nome', 'm-ind', 'm-cap', 'm-citta', 'm-prov'].forEach(id => { $(id).value = ''; });
+  $('add-modal').classList.add('open');
+  $('add-q').focus();
+  if (q) cercaAnagrafica();
+}
+function chiudiModale(){ $('add-modal').classList.remove('open'); }
+function apriCollega(r){
+  apriModale('Collega all\'anagrafica', `Sul file: ${r.nome_file} - ${r.indirizzo_file || ''} - ${r.citta || ''}`, r.nome_file.split(/\s+/).slice(0, 2).join(' '), r.id);
+}
+$('add-btn').addEventListener('click', () => apriModale('Aggiungi libreria', `Cerca nelle anagrafiche di BookUp. Parte con ${COPIE_DEFAULT} copie, poi le cambi dalla tendina.`, '', null));
+$('add-close').addEventListener('click', chiudiModale);
+$('add-modal').addEventListener('click', e => { if (e.target === $('add-modal')) chiudiModale(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') chiudiModale(); });
+
+let cercaT = null, cercaN = 0;
+$('add-q').addEventListener('input', () => { clearTimeout(cercaT); cercaT = setTimeout(cercaAnagrafica, 250); });
+async function cercaAnagrafica(){
+  const q = $('add-q').value.trim();
+  const box = $('add-ris');
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  const n = ++cercaN;
+  const { data, error } = await sb.rpc('indie_rivista_cerca_anagrafica', { q });
+  if (n !== cercaN) return;
+  if (error) { box.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(error.message)}</p>`; return; }
+  if (!data.length) { box.innerHTML = '<p class="hint">Nessun cliente trovato.</p>'; return; }
+  box.innerHTML = data.map(a => {
+    const s = statoDi({ in_anagrafica:true, stato:a.stato, motivo:a.motivo });
+    const azione = st.collegaId
+      ? `<button class="btn-secondary" type="button" data-cod="${esc(a.codice_cliente)}">Collega</button>`
+      : (a.gia_in_elenco ? '<span class="sync-line">Già in elenco</span>' : `<button class="btn-secondary" type="button" data-cod="${esc(a.codice_cliente)}">Aggiungi</button>`);
+    return `<div class="ris-row"><div class="inf"><b>${esc(a.ragione_sociale)}</b> <span class="badge ${s.c}">${esc(s.lab)}</span>
+      <small>${esc(a.codice_cliente)} · ${esc(a.indirizzo || '')} · ${esc(a.cap || '')} ${esc(a.citta || '')} ${esc(a.provincia || '')}${a.motivo ? ' · ' + esc(a.motivo) : ''}</small></div>${azione}</div>`;
+  }).join('');
+  box.querySelectorAll('button[data-cod]').forEach(b => b.addEventListener('click', () => {
+    const a = data.find(x => x.codice_cliente === b.dataset.cod);
+    if (st.collegaId) collega(st.collegaId, a); else aggiungi(a);
+  }));
+}
+async function aggiungi(a){
+  const { error } = await sb.from(TAB).insert({
+    codice_cliente:a.codice_cliente, ragione_sociale:a.ragione_sociale, indirizzo:a.indirizzo, cap:a.cap, citta:a.citta, provincia:a.provincia,
+    copie:COPIE_DEFAULT, abbinamento:'manuale',
+  });
+  if (error) { toast('Non aggiunta: ' + error.message, true); return; }
+  chiudiModale();
+  await caricaElenco();
+  toast(`${a.ragione_sociale} aggiunta con ${COPIE_DEFAULT} copie.`);
+}
+async function collega(id, a){
+  const { error } = await sb.from(TAB).update({ codice_cliente:a.codice_cliente, abbinamento:'manuale', da_verificare:false }).eq('id', id);
+  if (error) { toast('Non collegata: ' + error.message, true); return; }
+  chiudiModale();
+  await caricaElenco();
+  toast('Libreria collegata all\'anagrafica.');
+}
+$('m-save').addEventListener('click', async () => {
+  const nome = $('m-nome').value.trim();
+  if (!nome) { toast('Scrivi almeno il nome della libreria.', true); return; }
+  const v = id => $(id).value.trim() || null;
+  const { error } = await sb.from(TAB).insert({
+    ragione_sociale:nome, indirizzo:v('m-ind'), cap:v('m-cap'), citta:v('m-citta'), provincia:(v('m-prov') || '').toUpperCase() || null, copie:COPIE_DEFAULT,
+  });
+  if (error) { toast('Non aggiunta: ' + error.message, true); return; }
+  chiudiModale();
+  await caricaElenco();
+  toast(`${nome} aggiunta con ${COPIE_DEFAULT} copie.`);
+});
+
+checkSession();
+</script>
+</body>
+</html>
