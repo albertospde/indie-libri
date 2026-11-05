@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Indie Libri | PDE</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bree+Serif&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
@@ -83,7 +82,7 @@
   .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:12px; }
   .toolbar .spacer{ flex:1; }
   .sync-line{ font-size:13px; color:var(--text-dim); }
-  .filters{ display:grid; grid-template-columns:2fr repeat(3,1fr); gap:10px; align-items:end; }
+  .filters{ display:grid; grid-template-columns:2fr repeat(4,1fr); gap:10px; align-items:end; }
   @media (max-width:760px){ .filters{ grid-template-columns:1fr 1fr; } .filters .f-q{ grid-column:1 / -1; } }
   .kpis{ display:flex; gap:24px; flex-wrap:wrap; margin-top:14px; }
   .kpi{ background:none; border:0; border-bottom:2px solid transparent; padding:0 0 2px; text-align:left; color:inherit; }
@@ -95,7 +94,9 @@
 
   /* ---------- TABELLA ---------- */
   .tab-wrap{ overflow-x:auto; }
-  table{ width:100%; border-collapse:collapse; min-width:1040px; }
+  table{ width:100%; border-collapse:collapse; min-width:1180px; }
+  td.agente{ font-size:12.5px; max-width:170px; }
+  td.agente .senza{ color:var(--text-dim); }
   th{ text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-dim); padding:8px 6px; border-bottom:2px solid var(--border); white-space:nowrap; }
   th[data-sort]{ cursor:pointer; user-select:none; }
   th[data-sort]:hover{ color:var(--cyan); }
@@ -208,6 +209,7 @@
         <div class="filters">
           <div class="f-q"><label for="f-q">Cerca</label><input id="f-q" type="text" placeholder="Codice, nome, città, indirizzo…" autocomplete="off" /></div>
           <div><label for="f-prov">Provincia</label><select id="f-prov"><option value="">Tutte</option></select></div>
+          <div><label for="f-agente">Agente</label><select id="f-agente"><option value="">Tutti</option></select></div>
           <div><label for="f-stato">Stato libreria</label><select id="f-stato">
             <option value="">Tutti</option><option value="A">Attive</option><option value="S">Sospese</option><option value="C">Cessate</option><option value="N">Non in anagrafica</option>
           </select></div>
@@ -333,6 +335,7 @@ const COLS = [
   { key:'cap',             label:'CAP' },
   { key:'citta',           label:'Città' },
   { key:'provincia',       label:'Prov.' },
+  { key:'_agente',         label:'Agente' },
   { key:'_stato',          label:'Stato' },
   { key:'copie',           label:'Copie' },
   { key:'_conf',           label:'Conferma' },
@@ -350,7 +353,9 @@ function prepara(r){
   r._st = statoDi(r);
   r._stato = r._st.lab;
   r._conf = r.copie_confermate ?? -1;
-  r._search = norm([r.codice_cliente, r.ragione_sociale, r.nome_file, r.indirizzo, r.citta, r.provincia, r.cap, r.partita_iva, r.note].join(' '));
+  r._agenti = r.agenti_ruolo_agente || [];
+  r._agente = r._agenti.join(', ');
+  r._search = norm([r.codice_cliente, r.ragione_sociale, r.nome_file, r.indirizzo, r.citta, r.provincia, r.cap, r.partita_iva, r.note, r._agente].join(' '));
   return r;
 }
 function segnaDoppioni(){
@@ -373,6 +378,7 @@ async function caricaElenco(){
     st.rows = all.map(prepara);
     segnaDoppioni();
     riempiProvince();
+    riempiAgenti();
     $('sync-line').textContent = 'Dati e stato delle librerie aggiornati ogni notte dalle anagrafiche di BookUp (RPN).';
     applicaFiltri();
   } catch (e) {
@@ -390,12 +396,21 @@ function riempiProvince(){
   sel.value = prov.includes(cur) ? cur : '';
 }
 
+const SENZA_AGENTE = '__senza__';
+function riempiAgenti(){
+  const sel = $('f-agente'), cur = sel.value;
+  const nomi = [...new Set(st.rows.flatMap(r => r._agenti))].sort((a, b) => a.localeCompare(b, 'it'));
+  sel.innerHTML = '<option value="">Tutti</option>' + nomi.map(n => `<option>${esc(n)}</option>`).join('') + `<option value="${SENZA_AGENTE}">Senza agente</option>`;
+  sel.value = nomi.includes(cur) || cur === SENZA_AGENTE ? cur : '';
+}
+
 function applicaFiltri(){
   const parole = norm($('f-q').value).split(/\s+/).filter(Boolean);
-  const prov = $('f-prov').value, stato = $('f-stato').value, conf = $('f-conf').value;
+  const prov = $('f-prov').value, stato = $('f-stato').value, conf = $('f-conf').value, agente = $('f-agente').value;
   st.filtered = st.rows.filter(r => {
     if (parole.length && !parole.every(p => r._search.includes(p))) return false;
     if (prov && r.provincia !== prov) return false;
+    if (agente === SENZA_AGENTE ? r._agenti.length : agente && !r._agenti.includes(agente)) return false;
     if (stato && r._st.c !== stato) return false;
     if (conf === 'no' && r.copie_confermate != null) return false;
     if (conf === 'si' && r.copie_confermate == null) return false;
@@ -455,6 +470,7 @@ function rigaHtml(r){
     <td class="dati">${esc(r.cap || '')}</td>
     <td class="dati">${esc(r.citta || '')}</td>
     <td class="dati">${esc(r.provincia || '')}</td>
+    <td class="dati agente">${r._agente ? esc(r._agente) : '<span class="senza">—</span>'}</td>
     <td><span class="badge ${s.c}">${esc(s.lab)}</span>${r.stato === 'S' && r.motivo ? `<span class="motivo">${esc(r.motivo)}</span>` : ''}${s.c === 'N' ? `<button class="link-btn" type="button" data-azione="collega" data-id="${r.id}">Collega</button>` : ''}</td>
     <td class="copie">${selectCopie(r)}</td>
     <td class="conf">${cellaConferma(r)}</td>
@@ -596,6 +612,7 @@ async function togli(r){
   st.rows = st.rows.filter(x => x.id !== r.id);
   segnaDoppioni();
   riempiProvince();
+  riempiAgenti();
   applicaFiltri();
   toast('Libreria tolta dall\'elenco.');
 }
@@ -647,27 +664,187 @@ $('tab-head').addEventListener('click', e => {
   else { st.sortKey = th.dataset.sort; st.sortDir = 1; }
   applicaFiltri();
 });
-['f-prov', 'f-stato', 'f-conf'].forEach(id => $(id).addEventListener('change', applicaFiltri));
+['f-prov', 'f-agente', 'f-stato', 'f-conf'].forEach(id => $(id).addEventListener('change', applicaFiltri));
 $('f-q').addEventListener('input', applicaFiltri);
 $('reset-btn').addEventListener('click', () => {
-  $('f-q').value = ''; $('f-prov').value = ''; $('f-stato').value = ''; $('f-conf').value = '';
+  $('f-q').value = ''; $('f-prov').value = ''; $('f-agente').value = ''; $('f-stato').value = ''; $('f-conf').value = '';
   applicaFiltri();
 });
 $('conferma-tutte-btn').addEventListener('click', confermaVisibili);
 
 /* ---------- ESPORTA ---------- */
-$('export-btn').addEventListener('click', () => {
-  const righe = st.filtered.map(r => ({
-    'Codice':r.codice_cliente || '', 'Libreria':r.ragione_sociale, 'Indirizzo':r.indirizzo || '', 'CAP':r.cap || '',
-    'Città':r.citta || '', 'Prov.':r.provincia || '', 'Stato':r._st.lab, 'Motivo':r.motivo || '',
-    'Copie':r.copie, 'Copie confermate':r.copie_confermate ?? '',
-    'Confermata il':r.confermata_il ? new Date(r.confermata_il).toLocaleDateString('it-IT') : '',
-    'Confermata da':r.confermata_da || '', 'Note':r.note || '',
-  }));
-  const ws = XLSX.utils.json_to_sheet(righe);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Distribuzione Rivista');
-  XLSX.writeFile(wb, `IndieLibri_DistribuzioneRivista_${new Date().toISOString().slice(0, 10)}.xlsx`);
+// Libreria caricata solo al primo export: serve solo qui e pesa quasi 1 MB
+const EXCELJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+function caricaExcelJS(){
+  if (window.ExcelJS) return Promise.resolve();
+  return new Promise((ok, ko) => {
+    const s = document.createElement('script');
+    s.src = EXCELJS_URL;
+    s.onload = ok;
+    s.onerror = () => { s.remove(); ko(new Error('libreria Excel non raggiungibile')); };
+    document.head.appendChild(s);
+  });
+}
+
+const XL = { // stessi verdi dell'app
+  scuro:'FF0F766E', medio:'FF0D9488', chiaro:'FFF0FDFA', bordo:'FF99F6E4', bianco:'FFFFFFFF', testo:'FF132033',
+  stato:{
+    A:{ font:'FF1A7F37', fill:'FFE9F7EE' }, S:{ font:'FF8A5300', fill:'FFFFF4E0' },
+    C:{ font:'FFC62828', fill:'FFFDECEB' }, N:{ font:'FF5B6B7D', fill:'FFF0F0F0' },
+  },
+};
+const riempi = argb => ({ type:'pattern', pattern:'solid', fgColor:{ argb } });
+
+function descriviFiltri(){
+  const f = [];
+  const q = $('f-q').value.trim();
+  if (q) f.push(`ricerca "${q}"`);
+  if ($('f-prov').value) f.push(`provincia ${$('f-prov').value}`);
+  if ($('f-agente').value) f.push($('f-agente').value === SENZA_AGENTE ? 'senza agente' : `agente ${$('f-agente').value}`);
+  [ 'f-stato', 'f-conf' ].forEach(id => {
+    const sel = $(id);
+    if (sel.value) f.push(sel.options[sel.selectedIndex].text.toLowerCase());
+  });
+  return f;
+}
+
+// Costruisce il file Excel con le righe passate; restituisce il workbook
+function creaExcel(righe){
+  const COL = [
+    { h:'Codice', w:10 }, { h:'Libreria', w:38 }, { h:'Indirizzo', w:34 }, { h:'CAP', w:8 }, { h:'Città', w:22 }, { h:'Prov.', w:7 },
+    { h:'Stato', w:17 }, { h:'Motivo', w:26 }, { h:'Agente', w:30 }, { h:'Copie', w:9 }, { h:'Copie confermate', w:12 },
+    { h:'Confermata il', w:12 }, { h:'Confermata da', w:26 }, { h:'Note', w:14 },
+  ];
+  const IDX = { copie:10, conf:11, data:12 };
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Indie Libri';
+  const HEAD = 4;
+  const ws = wb.addWorksheet('Distribuzione Rivista', {
+    views:[{ state:'frozen', ySplit:HEAD, xSplit:2, showGridLines:false }],
+    pageSetup:{ orientation:'landscape', paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0, margins:{ left:.4, right:.4, top:.5, bottom:.6, header:.3, footer:.3 } },
+    headerFooter:{ oddFooter:'&LIndie Libri - Distribuzione Rivista&RPagina &P di &N' },
+  });
+  ws.columns = COL.map(c => ({ width:c.w }));
+  ws.pageSetup.printTitlesRow = `${HEAD}:${HEAD}`;
+
+  const distribuite = righe.reduce((t, r) => t + (r.copie_confermate || 0), 0);
+  const previste = righe.reduce((t, r) => t + r.copie, 0);
+  const confermate = righe.filter(r => r.copie_confermate != null).length;
+  const filtri = descriviFiltri();
+
+  // Fascia del titolo
+  ws.mergeCells(1, 1, 1, COL.length);
+  const t = ws.getCell(1, 1);
+  t.value = 'Distribuzione Rivista';
+  t.font = { name:'Calibri', size:20, bold:true, color:{ argb:XL.bianco } };
+  t.fill = riempi(XL.scuro);
+  t.alignment = { vertical:'middle', indent:1 };
+  ws.getRow(1).height = 36;
+
+  ws.mergeCells(2, 1, 2, COL.length);
+  const s = ws.getCell(2, 1);
+  const lib = n => `${fmt(n)} ${n === 1 ? 'libreria' : 'librerie'}`;
+  s.value = `${fmt(distribuite)} copie distribuite su ${fmt(previste)} previste  ·  ${lib(confermate)} su ${fmt(righe.length)} ${confermate === 1 ? 'confermata' : 'confermate'}`
+    + `  ·  Esportato il ${new Date().toLocaleDateString('it-IT')}${filtri.length ? '  ·  Filtri: ' + filtri.join(', ') : ''}`;
+  s.font = { name:'Calibri', size:12, color:{ argb:XL.bianco } };
+  s.fill = riempi(XL.medio);
+  s.alignment = { vertical:'middle', indent:1 };
+  ws.getRow(2).height = 24;
+  ws.getRow(3).height = 6;
+
+  // Intestazioni
+  const head = ws.getRow(HEAD);
+  head.values = COL.map(c => c.h);
+  head.height = 32;
+  const lato = { style:'thin', color:{ argb:XL.bordo } };
+  const bordi = { top:lato, left:lato, bottom:lato, right:lato };
+  head.eachCell(c => {
+    c.font = { name:'Calibri', size:11, bold:true, color:{ argb:XL.bianco } };
+    c.fill = riempi(XL.scuro);
+    c.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+    c.border = bordi;
+  });
+
+  // Righe
+  righe.forEach((r, i) => {
+    let quando = null;
+    if (r.confermata_il) { // data locale senza ora: Excel la mostra senza slittare di giorno
+      const d = new Date(r.confermata_il);
+      quando = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    }
+    const row = ws.addRow([
+      r.codice_cliente || '', r.ragione_sociale, r.indirizzo || '', r.cap || '', r.citta || '', r.provincia || '',
+      r._st.lab, r.motivo || '', r._agente, r.copie, r.copie_confermate ?? null, quando, r.confermata_da || '', r.note || '',
+    ]);
+    row.height = 18;
+    for (let n = 1; n <= COL.length; n++) {
+      const c = row.getCell(n);
+      c.font = { name:'Calibri', size:11, color:{ argb:XL.testo } };
+      c.fill = riempi(i % 2 ? XL.chiaro : XL.bianco);
+      c.border = bordi;
+      c.alignment = { vertical:'middle' };
+    }
+    row.getCell(2).font = { name:'Calibri', size:11, bold:true, color:{ argb:XL.testo } };
+    [1, 4, 6].forEach(n => { row.getCell(n).alignment = { vertical:'middle', horizontal:'center' }; });
+    const stato = row.getCell(7), col = XL.stato[r._st.c];
+    stato.font = { name:'Calibri', size:11, bold:true, color:{ argb:col.font } };
+    stato.fill = riempi(col.fill);
+    stato.alignment = { vertical:'middle', horizontal:'center' };
+    row.getCell(IDX.copie).numFmt = '#,##0';
+    const conf = row.getCell(IDX.conf);
+    conf.numFmt = '#,##0';
+    if (r.copie_confermate != null) {
+      // Copie cambiate dopo la conferma: in arancione, come "Riconferma" nell'app
+      const ok = r.copie_confermate === r.copie;
+      conf.font = { name:'Calibri', size:11, bold:true, color:{ argb:ok ? XL.stato.A.font : XL.stato.S.font } };
+      conf.fill = riempi(ok ? XL.stato.A.fill : XL.stato.S.fill);
+    }
+    const dt = row.getCell(IDX.data);
+    dt.numFmt = 'dd/mm/yyyy';
+    dt.alignment = { vertical:'middle', horizontal:'center' };
+  });
+
+  // Totale: segue i filtri usati dentro Excel
+  const primo = HEAD + 1, ultimo = HEAD + righe.length;
+  const tot = ws.addRow([]);
+  tot.height = 26;
+  const lett = n => ws.getColumn(n).letter;
+  for (let n = 1; n <= COL.length; n++) {
+    const c = tot.getCell(n);
+    c.fill = riempi(XL.scuro);
+    c.font = { name:'Calibri', size:13, bold:true, color:{ argb:XL.bianco } };
+    c.alignment = { vertical:'middle' };
+  }
+  tot.getCell(2).value = 'TOTALE';
+  [[IDX.copie, previste], [IDX.conf, distribuite]].forEach(([n, result]) => {
+    const c = tot.getCell(n);
+    c.value = righe.length ? { formula:`SUBTOTAL(109,${lett(n)}${primo}:${lett(n)}${ultimo})`, result } : 0;
+    c.numFmt = '#,##0';
+  });
+  if (righe.length) ws.autoFilter = { from:{ row:HEAD, column:1 }, to:{ row:ultimo, column:COL.length } };
+  return wb;
+}
+
+$('export-btn').addEventListener('click', async () => {
+  const btn = $('export-btn');
+  btn.disabled = true;
+  try {
+    await caricaExcelJS();
+    const buf = await creaExcel(st.filtered).xlsx.writeBuffer();
+    const url = URL.createObjectURL(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `IndieLibri_DistribuzioneRivista_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (e) {
+    console.error(e);
+    toast('Esportazione non riuscita: ' + (e.message || e), true);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 /* ---------- AGGIUNGI / COLLEGA ---------- */
