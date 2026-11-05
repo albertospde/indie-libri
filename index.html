@@ -64,6 +64,13 @@
   @media (max-width:1000px){ main{ grid-template-columns:minmax(0,1fr); padding:14px 16px; } .sidebar{ position:static; margin-bottom:14px; } }
   .sezione-titolo{ margin:0 0 16px; font-family:'Bree Serif',Georgia,serif; font-size:30px; font-weight:400; color:var(--a2); text-align:center; }
   html[data-theme="dark"] .sezione-titolo{ color:var(--a1); }
+  /* ---------- HOME: saluto e frase a caso ---------- */
+  #section-home{ min-height:60vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px 16px; }
+  #home-saluto{ font-family:'Bree Serif',Georgia,serif; font-size:40px; line-height:1.15; color:var(--a2); }
+  html[data-theme="dark"] #home-saluto{ color:var(--a1); }
+  #home-frase{ font-size:21px; line-height:1.45; color:var(--text-dim); max-width:640px; margin:16px 0 22px; transition:opacity .15s ease; }
+  #home-altra{ background:none; border:0; color:var(--cyan); font-size:14px; font-weight:600; text-decoration:underline; }
+  @media (max-width:760px){ #home-saluto{ font-size:30px; } #home-frase{ font-size:18px; } }
   .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin-bottom:16px; box-shadow:0 2px 10px rgba(20,45,90,.05); }
 
   /* ---------- TOTALONE ---------- */
@@ -178,11 +185,18 @@
 
   <main>
     <nav class="sidebar" aria-label="Sezioni">
+      <button class="side-item active" type="button" data-sezione="home"><span class="ico">🏠</span>Home</button>
       <div class="side-group">Rivista</div>
-      <button class="side-item active" type="button"><span class="ico">📰</span>Distribuzione Rivista</button>
+      <button class="side-item" type="button" data-sezione="rivista"><span class="ico">📰</span>Distribuzione Rivista</button>
     </nav>
 
-    <div id="section-rivista">
+    <div id="section-home">
+      <div id="home-saluto"></div>
+      <p id="home-frase"></p>
+      <button id="home-altra" type="button">Un'altra frase</button>
+    </div>
+
+    <div id="section-rivista" style="display:none;">
       <h1 class="sezione-titolo">Distribuzione Rivista</h1>
 
       <div class="card tot-card">
@@ -296,6 +310,50 @@ $('theme-btn').addEventListener('click', () => {
   try { localStorage.setItem('indie-tema', th); } catch (_e) {}
 });
 
+/* ---------- HOME E MENU ---------- */
+const HOME_FRASI = [
+  "Dietro ogni vetrina c'è qualcuno che ha scelto, uno per uno, i libri da farti incontrare.",
+  "Una libreria indipendente è un posto dove entri per un libro ed esci con tre.",
+  "Il miglior algoritmo del mondo sta dietro un bancone e ti chiede cosa hai letto di bello.",
+  "Ogni copia che parte oggi è una conversazione che comincia domani in libreria.",
+  "Ci sono librerie che sembrano piccole solo finché non inizi a guardare gli scaffali.",
+  "Un libraio che ti consiglia un libro ti sta facendo un regalo: sa già che ti piacerà.",
+  "Da Aosta a Trapani, c'è sempre una porta aperta con un campanello che suona.",
+  "Una città con una libreria in più è una città con un motivo in più per uscire di casa.",
+  "Le storie viaggiano in tanti modi. Le più belle passano di mano in mano.",
+  "Oggi è una buona giornata per far arrivare una bella pagina nel posto giusto.",
+  "Il profumo di carta appena aperta non ha ancora trovato un'alternativa.",
+  "Nessuno ricorda un carrello online, ma tutti ricordano la propria libreria.",
+];
+let homeFraseIdx = -1;
+function nuovaFrase(){
+  let i;
+  do { i = Math.floor(Math.random() * HOME_FRASI.length); } while (i === homeFraseIdx);
+  homeFraseIdx = i;
+  const el = $('home-frase');
+  el.style.opacity = '0';
+  setTimeout(() => { el.textContent = HOME_FRASI[i]; el.style.opacity = '1'; }, 150);
+}
+function scriviSaluto(user){
+  const ora = new Date().getHours();
+  const saluto = ora < 13 ? 'Buongiorno' : ora < 18 ? 'Buon pomeriggio' : 'Buonasera';
+  const parte = String(user.email || '').split('@')[0].split(/[._-]/)[0];
+  const nome = /^[a-zà-ù]{2,}$/i.test(parte) ? parte[0].toUpperCase() + parte.slice(1).toLowerCase() : '';
+  $('home-saluto').textContent = nome ? `${saluto}, ${nome}` : saluto;
+}
+let elencoCaricato = false;
+function mostraSezione(id){
+  $('section-home').style.display = id === 'home' ? 'flex' : 'none';
+  $('section-rivista').style.display = id === 'rivista' ? 'block' : 'none';
+  document.querySelectorAll('.side-item').forEach(b => b.classList.toggle('active', b.dataset.sezione === id));
+  if (id === 'rivista' && !elencoCaricato) { elencoCaricato = true; caricaElenco(); }
+}
+document.querySelector('.sidebar').addEventListener('click', e => {
+  const b = e.target.closest('.side-item');
+  if (b) mostraSezione(b.dataset.sezione);
+});
+$('home-altra').addEventListener('click', nuovaFrase);
+
 /* ---------- ACCESSO ---------- */
 async function checkSession(){
   const { data } = await sb.auth.getSession();
@@ -306,7 +364,9 @@ function showApp(user){
   $('login-screen').style.display = 'none';
   $('app').style.display = 'flex';
   $('user-chip').textContent = user.email || '';
-  caricaElenco();
+  scriviSaluto(user);
+  nuovaFrase();
+  mostraSezione('home');
 }
 $('login-box').addEventListener('submit', async e => {
   e.preventDefault();
