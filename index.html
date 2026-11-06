@@ -98,6 +98,15 @@
   #interne-tab{ min-width:0; margin-top:12px; }
   #interne-tab td.num,#interne-tab th.num{ text-align:right; font-variant-numeric:tabular-nums; }
   #interne-tab tfoot td{ font-weight:800; border-bottom:0; }
+  /* ---------- RUBRICA AGENTI ---------- */
+  #agenti-tab{ min-width:920px; }
+  #agenti-tab a{ color:var(--cyan); text-decoration:none; }
+  #agenti-tab a:hover{ text-decoration:underline; }
+  #agenti-tab .vuoto-c{ color:var(--text-dim); }
+  #agenti-tab tr.spenta td{ color:var(--text-dim); }
+  #agente-modal textarea{ width:100%; resize:vertical; font:inherit; }
+  .spunta{ display:flex; align-items:center; gap:8px; font-size:14.5px; }
+  .spunta input{ width:auto; }
   .modal .campi{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .modal .campi .largo{ grid-column:1 / -1; }
   .modal .azioni{ display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
@@ -206,12 +215,31 @@
       <button class="side-item active" type="button" data-sezione="home"><span class="ico">🏠</span>Home</button>
       <div class="side-group">Rivista</div>
       <button class="side-item" type="button" data-sezione="rivista"><span class="ico">📰</span>Distribuzione Rivista</button>
+      <div class="side-group">Agenti</div>
+      <button class="side-item" type="button" data-sezione="agenti"><span class="ico">👥</span>Indirizzi ed anagrafiche agenti</button>
     </nav>
 
     <div id="section-home">
       <div id="home-saluto"></div>
       <p id="home-frase"></p>
       <button id="home-altra" type="button">Un'altra frase</button>
+    </div>
+
+    <div id="section-agenti" style="display:none;">
+      <h1 class="sezione-titolo">Indirizzi ed anagrafiche agenti</h1>
+      <div class="card">
+        <div class="toolbar">
+          <span class="sync-line" id="agenti-info">Caricamento…</span>
+          <span class="spacer"></span>
+          <button class="btn-primary" id="agente-new" type="button" style="padding:9px 14px;font-size:14.5px;">＋ Aggiungi agente</button>
+        </div>
+        <div class="tab-wrap">
+          <table id="agenti-tab">
+            <thead><tr><th>Agente</th><th>Codice</th><th>Email</th><th>Telefono</th><th>Indirizzo</th><th>Note</th><th>Stato</th><th></th></tr></thead>
+            <tbody id="agenti-body"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <div id="section-rivista" style="display:none;">
@@ -306,6 +334,25 @@
   </div>
 </div>
 
+<div class="modal-bg" id="agente-modal">
+  <form class="modal" id="agente-form" role="dialog" aria-modal="true" aria-labelledby="agente-tit">
+    <h3><span id="agente-tit">Aggiungi agente</span><button class="x-btn" id="agente-close" type="button" aria-label="Chiudi">×</button></h3>
+    <p class="hint" id="agente-hint"></p>
+    <div class="campi">
+      <div class="largo"><label for="a-nome">Nome e cognome *</label><input id="a-nome" type="text" autocomplete="off" /></div>
+      <div><label for="a-email">Email</label><input id="a-email" type="email" autocomplete="off" /></div>
+      <div><label for="a-tel">Telefono</label><input id="a-tel" type="tel" autocomplete="off" /></div>
+      <div class="largo"><label for="a-ind">Indirizzo</label><input id="a-ind" type="text" autocomplete="off" /></div>
+      <div><label for="a-cod">Codice agente</label><input id="a-cod" type="text" autocomplete="off" /></div>
+      <div class="spunta" style="align-self:end;padding-bottom:10px;"><input id="a-attivo" type="checkbox" /><label for="a-attivo" style="margin:0;">Agente attivo</label></div>
+      <div class="largo"><label for="a-note">Note</label><textarea id="a-note" rows="2"></textarea></div>
+    </div>
+    <div class="azioni">
+      <button class="btn-primary" type="submit" style="padding:10px 18px;font-size:15px;">Salva</button>
+    </div>
+  </form>
+</div>
+
 <div class="modal-bg" id="numero-modal">
   <form class="modal" id="numero-form" role="dialog" aria-modal="true" aria-labelledby="numero-tit">
     <h3><span id="numero-tit">Nuovo numero</span><button class="x-btn" id="numero-close" type="button" aria-label="Chiudi">×</button></h3>
@@ -337,6 +384,7 @@ const TAB = 'indie_rivista_librerie';
 const TAB_DIST = 'indie_rivista_distribuzione';
 const TAB_NUM = 'indie_rivista_numeri';
 const TAB_INT = 'indie_rivista_copie_interne';
+const TAB_AGENTI = 'indie_agenti_rubrica';
 const COPIE_DEFAULT = 50;
 const COPIE_OPZIONI = [0, 25, 50, 75, 100, 150, 200, 300, 400, 500];
 
@@ -405,8 +453,10 @@ let elencoCaricato = false;
 function mostraSezione(id){
   $('section-home').style.display = id === 'home' ? 'flex' : 'none';
   $('section-rivista').style.display = id === 'rivista' ? 'block' : 'none';
+  $('section-agenti').style.display = id === 'agenti' ? 'block' : 'none';
   document.querySelectorAll('.side-item').forEach(b => b.classList.toggle('active', b.dataset.sezione === id));
   if (id === 'rivista' && !elencoCaricato) { elencoCaricato = true; caricaElenco(); }
+  if (id === 'agenti') caricaAgenti();
 }
 document.querySelector('.sidebar').addEventListener('click', e => {
   const b = e.target.closest('.side-item');
@@ -1314,6 +1364,91 @@ $('email-btn').addEventListener('click', async () => {
   } finally {
     btn.disabled = false;
   }
+});
+
+/* =====================================================================
+   INDIRIZZI ED ANAGRAFICHE AGENTI
+   ===================================================================== */
+// Le modifiche restano in indie_agenti_rubrica: agenti_pde governa gli accessi delle app PDE e da qui non si tocca
+let agenti = [], agenteInModifica = null;
+
+async function caricaAgenti(){
+  const { data, error } = await sb.rpc('indie_agenti_lista');
+  if (error) {
+    console.error(error);
+    const negato = error.code === '42501';
+    $('agenti-info').innerHTML = `<span style="color:var(--danger);font-weight:700;">${negato ? 'La tua utenza non è abilitata a questa sezione.' : 'Errore di caricamento: ' + esc(error.message)}</span>`;
+    $('agenti-body').innerHTML = '';
+    return;
+  }
+  agenti = data;
+  disegnaAgenti();
+}
+
+function disegnaAgenti(){
+  const attivi = agenti.filter(a => a.attivo).length;
+  const senzaTel = agenti.filter(a => a.attivo && !a.telefono).length;
+  $('agenti-info').textContent = `${fmt(attivi)} ${attivi === 1 ? 'agente attivo' : 'agenti attivi'} su ${fmt(agenti.length)}${senzaTel ? ` · ${fmt(senzaTel)} senza telefono` : ''}`;
+  const vuoto = '<span class="vuoto-c">—</span>';
+  $('agenti-body').innerHTML = agenti.length ? agenti.map((a, i) => `<tr class="${a.attivo ? '' : 'spenta'}">
+    <td class="nome">${esc(a.nome)}</td>
+    <td class="cod">${a.codice ? esc(a.codice) : vuoto}</td>
+    <td>${a.email ? `<a href="mailto:${esc(a.email)}">${esc(a.email)}</a>` : vuoto}</td>
+    <td style="white-space:nowrap;">${a.telefono ? `<a href="tel:${esc(a.telefono.replace(/[^\d+]/g, ''))}">${esc(a.telefono)}</a>` : vuoto}</td>
+    <td>${a.indirizzo ? esc(a.indirizzo) : vuoto}</td>
+    <td>${a.note ? esc(a.note) : vuoto}</td>
+    <td><span class="badge ${a.attivo ? 'A' : 'N'}">${a.attivo ? 'Attivo' : 'Non attivo'}</span></td>
+    <td style="width:1%;"><button class="btn-secondary" type="button" data-agente="${i}">✏ Modifica</button></td>
+  </tr>`).join('') : '<tr><td colspan="8" class="vuoto">Nessun agente in elenco.</td></tr>';
+}
+
+function apriAgente(a){
+  agenteInModifica = a;
+  $('agente-tit').textContent = a ? `Modifica ${a.nome}` : 'Aggiungi agente';
+  $('agente-hint').textContent = a?.agente_pde_id
+    ? 'Le modifiche valgono per questa app e per le email agli agenti. BookUp non cambia.'
+    : 'Un agente aggiunto qui entra in rubrica. Le librerie collegate agli agenti arrivano da BookUp.';
+  $('a-nome').value = a?.nome || '';
+  $('a-email').value = a?.email || '';
+  $('a-tel').value = a?.telefono || '';
+  $('a-ind').value = a?.indirizzo || '';
+  $('a-cod').value = a?.codice || '';
+  $('a-cod').disabled = !!a?.agente_pde_id; // il codice degli agenti BookUp li collega alle librerie
+  $('a-note').value = a?.note || '';
+  $('a-attivo').checked = a ? a.attivo : true;
+  $('agente-modal').classList.add('open');
+  $('a-nome').focus();
+}
+function chiudiAgente(){ $('agente-modal').classList.remove('open'); }
+
+$('agente-new').addEventListener('click', () => apriAgente(null));
+$('agente-close').addEventListener('click', chiudiAgente);
+$('agente-modal').addEventListener('click', e => { if (e.target === $('agente-modal')) chiudiAgente(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') chiudiAgente(); });
+$('agenti-body').addEventListener('click', e => {
+  const b = e.target.closest('button[data-agente]');
+  if (b) apriAgente(agenti[Number(b.dataset.agente)]);
+});
+$('agente-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const v = id => $(id).value.trim() || null;
+  const nome = v('a-nome');
+  const email = v('a-email')?.toLowerCase() || null;
+  if (!nome) { toast('Scrivi nome e cognome.', true); return; }
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('L\'indirizzo email non è valido.', true); return; }
+  const a = agenteInModifica;
+  const riga = {
+    nome, email, telefono:v('a-tel'), indirizzo:v('a-ind'), codice:v('a-cod'), note:v('a-note'), attivo:$('a-attivo').checked,
+    aggiornato_il:new Date().toISOString(), aggiornato_da:currentUser?.email || null,
+  };
+  // Agente di BookUp mai modificato: la prima modifica crea la sua riga in rubrica
+  const { error } = a?.id
+    ? await sb.from(TAB_AGENTI).update(riga).eq('id', a.id)
+    : await sb.from(TAB_AGENTI).insert({ ...riga, agente_pde_id:a?.agente_pde_id ?? null });
+  if (error) { toast('Non salvato: ' + error.message, true); return; }
+  chiudiAgente();
+  await caricaAgenti();
+  toast(a ? 'Agente aggiornato.' : `${nome} aggiunto.`);
 });
 
 /* ---------- AGGIUNGI / COLLEGA ---------- */
