@@ -99,7 +99,13 @@
   #interne-tab td.num,#interne-tab th.num{ text-align:right; font-variant-numeric:tabular-nums; }
   #interne-tab tfoot td{ font-weight:800; border-bottom:0; }
   /* ---------- RUBRICA AGENTI ---------- */
-  #agenti-tab{ min-width:920px; }
+  #agenti-tab{ min-width:1280px; }
+  .reg-celle{ display:flex; flex-wrap:wrap; gap:4px; min-width:230px; }
+  .reg-chip{ font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--cyan-dim); color:var(--text); white-space:nowrap; }
+  .reg-altre{ font-size:11.5px; color:var(--text-dim); align-self:center; cursor:help; }
+  .reg-scelta{ display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:4px 10px; max-height:170px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:8px 10px; }
+  .reg-scelta label{ display:flex; align-items:center; gap:6px; margin:0; font-size:13.5px; font-weight:500; }
+  .reg-scelta input{ width:auto; }
   #agenti-tab a{ color:var(--cyan); text-decoration:none; }
   #agenti-tab a:hover{ text-decoration:underline; }
   #agenti-tab .vuoto-c{ color:var(--text-dim); }
@@ -231,11 +237,12 @@
         <div class="toolbar">
           <span class="sync-line" id="agenti-info">Caricamento…</span>
           <span class="spacer"></span>
+          <select id="agenti-reg" aria-label="Filtra per regione" style="width:auto;"></select>
           <button class="btn-primary" id="agente-new" type="button" style="padding:9px 14px;font-size:14.5px;">＋ Aggiungi agente</button>
         </div>
         <div class="tab-wrap">
           <table id="agenti-tab">
-            <thead><tr><th>Agente</th><th>Codice</th><th>Email</th><th>Telefono</th><th>Indirizzo</th><th>Note</th><th>Stato</th><th></th></tr></thead>
+            <thead><tr id="agenti-head"></tr></thead>
             <tbody id="agenti-body"></tbody>
           </table>
         </div>
@@ -339,10 +346,12 @@
     <h3><span id="agente-tit">Aggiungi agente</span><button class="x-btn" id="agente-close" type="button" aria-label="Chiudi">×</button></h3>
     <p class="hint" id="agente-hint"></p>
     <div class="campi">
-      <div class="largo"><label for="a-nome">Nome e cognome *</label><input id="a-nome" type="text" autocomplete="off" /></div>
+      <div><label for="a-cognome">Cognome *</label><input id="a-cognome" type="text" autocomplete="off" /></div>
+      <div><label for="a-nome">Nome *</label><input id="a-nome" type="text" autocomplete="off" /></div>
       <div><label for="a-email">Email</label><input id="a-email" type="email" autocomplete="off" /></div>
       <div><label for="a-tel">Telefono</label><input id="a-tel" type="tel" autocomplete="off" /></div>
       <div class="largo"><label for="a-ind">Indirizzo</label><input id="a-ind" type="text" autocomplete="off" /></div>
+      <div class="largo"><label>Regioni di competenza</label><div class="reg-scelta" id="a-regioni"></div></div>
       <div><label for="a-cod">Codice agente</label><input id="a-cod" type="text" autocomplete="off" /></div>
       <div class="spunta" style="align-self:end;padding-bottom:10px;"><input id="a-attivo" type="checkbox" /><label for="a-attivo" style="margin:0;">Agente attivo</label></div>
       <div class="largo"><label for="a-note">Note</label><textarea id="a-note" rows="2"></textarea></div>
@@ -1382,32 +1391,98 @@ async function caricaAgenti(){
     return;
   }
   agenti = data;
+  riempiFiltroRegioni();
   disegnaAgenti();
 }
+
+// Regioni: calcolate dai clienti attivi (da SOGLIA_REGIONE in su, sotto sono casi isolati), oppure scelte a mano
+const REGIONI = ['ABRUZZO', 'BASILICATA', 'CALABRIA', 'CAMPANIA', 'EMILIA ROMAGNA', 'FRIULI VENEZIA GIULIA', 'LAZIO', 'LIGURIA', 'LOMBARDIA', 'MARCHE', 'MOLISE', 'PIEMONTE', 'PUGLIA', 'SARDEGNA', 'SICILIA', 'TOSCANA', 'TRENTINO ALTO ADIGE', 'UMBRIA', "VALLE D'AOSTA", 'VENETO'];
+const SOGLIA_REGIONE = 5;
+const nomeRegione = r => r.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()).replace("D'aosta", "d'Aosta");
+const regioniCalcolate = a => (a?.regioni_clienti || []).filter(x => x.n >= SOGLIA_REGIONE).map(x => x.regione);
+const regioniDi = a => a.regioni ?? regioniCalcolate(a);
+
+function riempiFiltroRegioni(){
+  const sel = $('agenti-reg'), cur = sel.value;
+  const usate = REGIONI.filter(r => agenti.some(a => regioniDi(a).includes(r)));
+  sel.innerHTML = '<option value="">Tutte le regioni</option>' + usate.map(r => `<option value="${esc(r)}">${esc(nomeRegione(r))}</option>`).join('');
+  sel.value = usate.includes(cur) ? cur : '';
+}
+$('agenti-reg').addEventListener('change', () => disegnaAgenti());
+
+function cellaRegioni(a){
+  const n = r => (a.regioni_clienti || []).find(x => x.regione === r)?.n;
+  const scelte = regioniDi(a);
+  const chips = scelte.map(r => {
+    const clienti = n(r);
+    return `<span class="reg-chip" title="${clienti ? `${fmt(clienti)} clienti attivi` : 'Scelta a mano'}">${esc(nomeRegione(r))}</span>`;
+  }).join('');
+  const altre = (a.regioni_clienti || []).filter(x => !scelte.includes(x.regione));
+  const piu = altre.length ? `<span class="reg-altre" title="${esc(altre.map(x => `${nomeRegione(x.regione)}: ${fmt(x.n)}`).join(', '))}">+${altre.length} con pochi clienti</span>` : '';
+  return chips || piu ? `<div class="reg-celle">${chips}${piu}</div>` : '<span class="vuoto-c">—</span>';
+}
+
+const nomeOrdine = a => `${a.cognome || ''} ${a.nome || ''}`;
+const COL_AGENTI = [
+  { key:'cognome',   label:'Cognome',   val:a => a.cognome },
+  { key:'nome',      label:'Nome',      val:a => a.nome },
+  { key:'codice',    label:'Codice',    val:a => a.codice },
+  { key:'regioni',   label:'Regioni di competenza', val:a => regioniDi(a).map(nomeRegione).join(', ') },
+  { key:'email',     label:'Email',     val:a => a.email },
+  { key:'telefono',  label:'Telefono',  val:a => a.telefono },
+  { key:'indirizzo', label:'Indirizzo', val:a => a.indirizzo },
+  { key:'note',      label:'Note',      val:a => a.note },
+  { key:'stato',     label:'Stato',     val:a => a.attivo ? 'Attivo' : 'Non attivo' },
+];
+const ordineAgenti = { key:'cognome', dir:1 };
+$('agenti-head').addEventListener('click', e => {
+  const th = e.target.closest('th[data-ordina]');
+  if (!th) return;
+  if (ordineAgenti.key === th.dataset.ordina) ordineAgenti.dir *= -1;
+  else { ordineAgenti.key = th.dataset.ordina; ordineAgenti.dir = 1; }
+  disegnaAgenti();
+});
 
 function disegnaAgenti(){
   const attivi = agenti.filter(a => a.attivo).length;
   const senzaTel = agenti.filter(a => a.attivo && !a.telefono).length;
-  $('agenti-info').textContent = `${fmt(attivi)} ${attivi === 1 ? 'agente attivo' : 'agenti attivi'} su ${fmt(agenti.length)}${senzaTel ? ` · ${fmt(senzaTel)} senza telefono` : ''}`;
+  $('agenti-info').textContent = `${fmt(attivi)} ${attivi === 1 ? 'agente attivo' : 'agenti attivi'} su ${fmt(agenti.length)}${senzaTel ? ` · ${fmt(senzaTel)} senza telefono` : ''} · Regioni ricavate dai clienti attivi di BookUp, correggibili con Modifica`;
   const vuoto = '<span class="vuoto-c">—</span>';
-  $('agenti-body').innerHTML = agenti.length ? agenti.map((a, i) => `<tr class="${a.attivo ? '' : 'spenta'}">
+  const reg = $('agenti-reg').value;
+  const righe = agenti.map((a, i) => ({ a, i })).filter(({ a }) => !reg || regioniDi(a).includes(reg));
+  const col = COL_AGENTI.find(c => c.key === ordineAgenti.key);
+  // I campi vuoti restano in fondo, in entrambi i versi; a parità vale cognome e nome
+  righe.sort((x, y) => {
+    const p = col.val(x.a), q = col.val(y.a);
+    if (!p !== !q) return p ? -1 : 1;
+    return (p && q ? p.localeCompare(q, 'it', { numeric:true, sensitivity:'base' }) * ordineAgenti.dir : 0)
+      || nomeOrdine(x.a).localeCompare(nomeOrdine(y.a), 'it', { sensitivity:'base' });
+  });
+  $('agenti-head').innerHTML = COL_AGENTI.map(c => {
+    const su = ordineAgenti.key === c.key;
+    return `<th data-ordina="${c.key}" aria-sort="${su ? (ordineAgenti.dir > 0 ? 'ascending' : 'descending') : 'none'}" title="Ordina A/Z o Z/A" style="cursor:pointer;user-select:none;">${c.label}${su ? `<span class="arrow">${ordineAgenti.dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`;
+  }).join('') + '<th></th>';
+  $('agenti-body').innerHTML = righe.length ? righe.map(({ a, i }) => `<tr class="${a.attivo ? '' : 'spenta'}">
+    <td class="nome">${a.cognome ? esc(a.cognome) : vuoto}</td>
     <td class="nome">${esc(a.nome)}</td>
     <td class="cod">${a.codice ? esc(a.codice) : vuoto}</td>
+    <td>${cellaRegioni(a)}</td>
     <td>${a.email ? `<a href="mailto:${esc(a.email)}">${esc(a.email)}</a>` : vuoto}</td>
     <td style="white-space:nowrap;">${a.telefono ? `<a href="tel:${esc(a.telefono.replace(/[^\d+]/g, ''))}">${esc(a.telefono)}</a>` : vuoto}</td>
     <td>${a.indirizzo ? esc(a.indirizzo) : vuoto}</td>
     <td>${a.note ? esc(a.note) : vuoto}</td>
     <td><span class="badge ${a.attivo ? 'A' : 'N'}">${a.attivo ? 'Attivo' : 'Non attivo'}</span></td>
     <td style="width:1%;"><button class="btn-secondary" type="button" data-agente="${i}">✏ Modifica</button></td>
-  </tr>`).join('') : '<tr><td colspan="8" class="vuoto">Nessun agente in elenco.</td></tr>';
+  </tr>`).join('') : `<tr><td colspan="${COL_AGENTI.length + 1}" class="vuoto">${reg ? 'Nessun agente per questa regione.' : 'Nessun agente in elenco.'}</td></tr>`;
 }
 
 function apriAgente(a){
   agenteInModifica = a;
-  $('agente-tit').textContent = a ? `Modifica ${a.nome}` : 'Aggiungi agente';
+  $('agente-tit').textContent = a ? `Modifica ${a.nome} ${a.cognome || ''}`.trim() : 'Aggiungi agente';
   $('agente-hint').textContent = a?.agente_pde_id
     ? 'Le modifiche valgono per questa app e per le email agli agenti. BookUp non cambia.'
     : 'Un agente aggiunto qui entra in rubrica. Le librerie collegate agli agenti arrivano da BookUp.';
+  $('a-cognome').value = a?.cognome || '';
   $('a-nome').value = a?.nome || '';
   $('a-email').value = a?.email || '';
   $('a-tel').value = a?.telefono || '';
@@ -1416,8 +1491,10 @@ function apriAgente(a){
   $('a-cod').disabled = !!a?.agente_pde_id; // il codice degli agenti BookUp li collega alle librerie
   $('a-note').value = a?.note || '';
   $('a-attivo').checked = a ? a.attivo : true;
+  const scelte = a ? regioniDi(a) : [];
+  $('a-regioni').innerHTML = REGIONI.map(r => `<label><input type="checkbox" value="${esc(r)}"${scelte.includes(r) ? ' checked' : ''} />${esc(nomeRegione(r))}</label>`).join('');
   $('agente-modal').classList.add('open');
-  $('a-nome').focus();
+  $('a-cognome').focus();
 }
 function chiudiAgente(){ $('agente-modal').classList.remove('open'); }
 
@@ -1432,13 +1509,18 @@ $('agenti-body').addEventListener('click', e => {
 $('agente-form').addEventListener('submit', async e => {
   e.preventDefault();
   const v = id => $(id).value.trim() || null;
-  const nome = v('a-nome');
+  const nome = v('a-nome'), cognome = v('a-cognome');
   const email = v('a-email')?.toLowerCase() || null;
-  if (!nome) { toast('Scrivi nome e cognome.', true); return; }
+  if (!nome || !cognome) { toast('Scrivi nome e cognome.', true); return; }
   if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('L\'indirizzo email non è valido.', true); return; }
   const a = agenteInModifica;
+  const spuntate = [...$('a-regioni').querySelectorAll('input:checked')].map(c => c.value);
+  // Se coincidono con quelle calcolate restano automatiche: seguiranno i clienti di BookUp
+  const calcolate = regioniCalcolate(a);
+  const uguali = spuntate.length === calcolate.length && spuntate.every(r => calcolate.includes(r));
   const riga = {
-    nome, email, telefono:v('a-tel'), indirizzo:v('a-ind'), codice:v('a-cod'), note:v('a-note'), attivo:$('a-attivo').checked,
+    nome, cognome, email, telefono:v('a-tel'), indirizzo:v('a-ind'), codice:v('a-cod'), note:v('a-note'), attivo:$('a-attivo').checked,
+    regioni:uguali ? null : spuntate,
     aggiornato_il:new Date().toISOString(), aggiornato_da:currentUser?.email || null,
   };
   // Agente di BookUp mai modificato: la prima modifica crea la sua riga in rubrica
@@ -1448,7 +1530,7 @@ $('agente-form').addEventListener('submit', async e => {
   if (error) { toast('Non salvato: ' + error.message, true); return; }
   chiudiAgente();
   await caricaAgenti();
-  toast(a ? 'Agente aggiornato.' : `${nome} aggiunto.`);
+  toast(a ? 'Agente aggiornato.' : `Agente aggiunto: ${nome} ${cognome}.`);
 });
 
 /* ---------- AGGIUNGI / COLLEGA ---------- */
