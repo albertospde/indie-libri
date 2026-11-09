@@ -1743,10 +1743,16 @@ function base64Di(bytes){
 const base64Testo = testo => base64Di(new TextEncoder().encode(testo));
 const aRighe76 = b64 => b64.replace(/.{1,76}/g, '$&\r\n');
 
+// Sempre in copia nelle bozze per gli agenti
+const EMAIL_CC = ['paolo.soraci@consultant.pde.it', 'federica.sala@pde.it', 'comunicazione@pde.it'];
+
 function creaEml({ a, oggetto, testo, allegato, nomeAllegato }){
   const confine = 'indielibri' + Date.now().toString(36);
+  const destinatari = new Set(a.map(x => x.toLowerCase()));
+  const copia = EMAIL_CC.filter(x => !destinatari.has(x.toLowerCase())); // chi è già tra i destinatari non si ripete
   return [
     `To: ${a.join(', ')}`,
+    ...(copia.length ? [`Cc: ${copia.join(', ')}`] : []),
     `Subject: =?UTF-8?B?${base64Testo(oggetto)}?=`,
     'X-Unsent: 1',
     'MIME-Version: 1.0',
