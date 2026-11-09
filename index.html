@@ -119,6 +119,8 @@
   .modal .azioni .spacer{ flex:1; }
   .carica-avviso{ background:var(--warn-bg); color:var(--warn-text); border-radius:10px; padding:9px 12px; font-size:13.5px; margin-bottom:8px; }
   .carica-avviso small{ display:block; margin-top:3px; font-size:12.5px; }
+  .carica-sez{ margin:12px 0 2px; font-size:13px; font-weight:700; color:var(--a2); text-transform:uppercase; letter-spacing:.03em; }
+  html[data-theme="dark"] .carica-sez{ color:var(--a1); }
   .ris-row .da-a{ white-space:nowrap; font-weight:700; font-variant-numeric:tabular-nums; }
   .btn-danger{ color:var(--danger); }
   /* ---------- FILTRI E INDICATORI ---------- */
@@ -1452,7 +1454,7 @@ $('estrai-form').addEventListener('submit', async e => {
 });
 
 /* ---------- CARICA EXCEL ---------- */
-// Aggiorna solo le copie del numero aperto: conferme e totale distribuito non cambiano
+// Aggiorna le copie e aggiunge le librerie nuove nel numero aperto: le conferme non cambiano
 let caricaPiano = null;
 function valoreCella(v){
   if (v && typeof v === 'object') {
@@ -1465,7 +1467,8 @@ function valoreCella(v){
   return v;
 }
 const testoCella = v => { const x = valoreCella(v); return x == null ? '' : String(x).trim(); };
-const chiaveTitolo = s => testoCella(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+const chiaveTitolo = s => testoCella(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const chiaveNome = (nome, citta) => normStretto(nome) + '|' + normStretto(citta);
 
 // Cerca l'intestazione nelle prime righe: vanno bene il file per agente, l'Esporta e ogni foglio con Codice e Copie
 function colonneFoglio(ws){
@@ -1477,8 +1480,13 @@ function colonneFoglio(ws){
       else if (t === 'codice' || t === 'codicecliente') col.codice = i;
       else if (t === 'copie' || t === 'quantita' || t === 'qta') col.copie = i;
       else if (t === 'libreria' || t === 'ragionesociale') col.nome = i;
+      else if (t === 'indirizzo') col.indirizzo = i;
+      else if (t === 'cap') col.cap = i;
+      else if (t === 'citta') col.citta = i;
+      else if (t === 'prov' || t === 'provincia') col.prov = i;
     });
-    if (col.copie && (col.id || col.codice)) return { riga:n, ...col };
+    // Basta il codice con le copie o con il nome, oppure il nome con le copie o la città: senza copie una libreria nuova parte da 50
+    if (col.copie ? (col.id || col.codice || col.nome) : (col.nome && (col.codice || col.citta || col.indirizzo))) return { riga:n, ...col };
   }
   return null;
 }
@@ -1487,7 +1495,15 @@ function analizzaExcel(wb){
   const perId = new Map(st.rows.map(r => [r.id, r]));
   const perCodice = new Map();
   st.rows.forEach(r => { if (r.codice_cliente) perCodice.set(r.codice_cliente, [...(perCodice.get(r.codice_cliente) || []), r]); });
-  const valori = new Map();
+  const perNome = new Map();
+  st.rows.forEach(r => [[r.ragione_sociale, r.citta], [r.nome_file, r.citta]].forEach(([n, c]) => {
+    if (!n) return;
+    const k = chiaveNome(n, c);
+    const v = perNome.get(k) || new Set();
+    v.add(r);
+    perNome.set(k, v);
+  }));
+  const valori = new Map(), nuove = new Map();
   const ignote = [], doppie = [], errate = [];
   let fogli = 0, vuote = 0;
   wb.worksheets.forEach(ws => {
@@ -1498,22 +1514,36 @@ function analizzaExcel(wb){
       const row = ws.getRow(n);
       const idTxt = col.id ? testoCella(row.getCell(col.id).value) : '';
       const codice = col.codice ? testoCella(row.getCell(col.codice).value) : '';
-      if (!idTxt && !codice) continue; // righe vuote e TOTALE
-      const nome = (col.nome ? testoCella(row.getCell(col.nome).value) : '') || codice || idTxt;
+      const leggi = k => col[k] ? testoCella(row.getCell(col[k]).value) : '';
+      const nomeFile = leggi('nome');
+      if ((!idTxt && !codice && !nomeFile) || chiaveTitolo(nomeFile) === 'totale') continue; // righe vuote e TOTALE
+      const nome = nomeFile || codice || idTxt;
+      const citta = leggi('citta');
       let r = null;
-      if (idTxt) {
-        r = perId.get(Number(idTxt)) || null;
-        if (r && codice && r.codice_cliente && r.codice_cliente !== codice) r = null; // ID e codice non coincidono: meglio non indovinare
-      } else {
+      if (idTxt && perId.has(Number(idTxt))) {
+        r = perId.get(Number(idTxt));
+        if (codice && r.codice_cliente && r.codice_cliente !== codice) { ignote.push(nome); continue; } // ID e codice non coincidono: meglio non indovinare
+      } else if (codice) {
         const trovate = perCodice.get(codice) || [];
         if (trovate.length > 1) { doppie.push(nome); continue; }
         r = trovate[0] || null;
+      } else if (nomeFile) {
+        const trovate = [...(perNome.get(chiaveNome(nomeFile, citta)) || [])];
+        if (trovate.length > 1) { doppie.push(nome); continue; }
+        r = trovate[0] || null;
       }
-      if (!r) { ignote.push(nome); continue; }
-      const grezzo = valoreCella(row.getCell(col.copie).value);
-      if (grezzo == null || grezzo === '') { vuote++; continue; }
-      const num = typeof grezzo === 'number' ? grezzo : Number(String(grezzo).trim().replace(/\./g, '').replace(',', '.'));
-      if (!Number.isInteger(num) || num < 0) { errate.push(`${nome}: ${grezzo}`); continue; }
+      const grezzo = col.copie ? valoreCella(row.getCell(col.copie).value) : null;
+      const vuota = grezzo == null || grezzo === '';
+      const num = vuota ? null : (typeof grezzo === 'number' ? grezzo : Number(String(grezzo).trim().replace(/\./g, '').replace(',', '.')));
+      if (!vuota && (!Number.isInteger(num) || num < 0)) { errate.push(`${nome}: ${grezzo}`); continue; }
+      if (!r) {
+        if (!codice && !nomeFile) { ignote.push(nome); continue; }
+        const k = codice ? 'c:' + codice : 'n:' + chiaveNome(nomeFile, citta);
+        if (!nuove.has(k)) nuove.set(k, { codice, nome:nomeFile, indirizzo:leggi('indirizzo'), cap:leggi('cap'), citta, provincia:leggi('prov').toUpperCase(), set:new Set() });
+        if (!vuota) nuove.get(k).set.add(num);
+        continue;
+      }
+      if (vuota) { vuote++; continue; }
       if (!valori.has(r.id)) valori.set(r.id, { r, set:new Set() });
       valori.get(r.id).set.add(num);
     }
@@ -1526,12 +1556,73 @@ function analizzaExcel(wb){
     if (nuovo === r.copie) uguali++; else cambi.push({ r, nuovo });
   });
   cambi.sort((a, b) => a.r.ragione_sociale.localeCompare(b.r.ragione_sociale, 'it'));
+  const daAggiungere = [];
+  nuove.forEach(n => {
+    if (n.set.size > 1) { contrasti.push(`${n.nome || n.codice}: ${[...n.set].join(' / ')}`); return; }
+    daAggiungere.push({ ...n, copie:n.set.size ? [...n.set][0] : COPIE_DEFAULT, copieDefault:!n.set.size });
+  });
   // Il titolo del file dice a quale numero appartiene
   const titoli = wb.worksheets.map(ws => testoCella(ws.getCell(1, 1).value));
   const aperto = numeroAperto();
   const altro = st.numeri.find(n => n.id !== aperto?.id && titoli.some(t => t.endsWith(' - ' + n.titolo)));
   const diAltroNumero = altro && !titoli.some(t => t.endsWith(' - ' + aperto?.titolo)) ? altro.titolo : null;
-  return { fogli, cambi, uguali, vuote, ignote:[...new Set(ignote)], doppie:[...new Set(doppie)], errate, contrasti, diAltroNumero };
+  return { fogli, cambi, nuove:daAggiungere, uguali, vuote, ignote:[...new Set(ignote)], doppie:[...new Set(doppie)], errate, contrasti, diAltroNumero };
+}
+
+// Completa le librerie nuove con l'anagrafica BookUp e con quelle già usate in altri numeri
+async function completaNuove(a){
+  if (!a.nuove.length) return;
+  const codici = [...new Set(a.nuove.filter(n => n.codice).map(n => n.codice))];
+  const anag = new Map();
+  // La ricerca è per parole e trova anche CAP o P.IVA simili: vale solo il codice identico
+  for (let i = 0; i < codici.length; i += 10) {
+    await Promise.all(codici.slice(i, i + 10).map(async cod => {
+      const { data, error } = await sb.rpc('indie_rivista_cerca_anagrafica', { q:cod, p_numero:st.numeroId });
+      if (error) throw error;
+      const x = data.find(y => y.codice_cliente === cod);
+      if (x) anag.set(cod, x);
+    }));
+  }
+  const presenti = new Set(st.rows.map(r => r.id));
+  const elenco = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from(TAB).select('id,codice_cliente,ragione_sociale,citta').order('id').range(from, from + 999);
+    if (error) throw error;
+    elenco.push(...data);
+    if (data.length < 1000) break;
+  }
+  const libere = elenco.filter(l => !presenti.has(l.id));
+  const scartate = [];
+  const nomiPresenti = new Set(st.rows.flatMap(r => [chiaveNome(r.ragione_sociale, r.citta), chiaveNome(r.nome_file, r.citta)]));
+  a.nuove = a.nuove.filter(n => {
+    const x = n.codice ? anag.get(n.codice) : null;
+    if (n.codice && !x && !n.nome) { scartate.push(n.codice); return false; }
+    // Un codice sconosciuto viene salvato senza codice: al secondo caricamento va riconosciuta dal nome, o si crea un doppione
+    if (n.codice && !x && nomiPresenti.has(chiaveNome(n.nome, n.citta))) { a.uguali++; return false; }
+    n.anag = x || null;
+    n.codiceSconosciuto = !!(n.codice && !x);
+    n.libreriaId = (x ? libere.find(l => l.codice_cliente === n.codice)
+      : libere.find(l => !l.codice_cliente && chiaveNome(l.ragione_sociale, l.citta) === chiaveNome(n.nome, n.citta)))?.id || null;
+    n.stato = x ? statoDi({ in_anagrafica:true, stato:x.stato, motivo:x.motivo }) : { c:'N', lab:'Non in anagrafica' };
+    n.titolo = x?.ragione_sociale || n.nome;
+    // Sospese, cessate e codici sconosciuti restano da spuntare a mano
+    n.scelta = !n.codiceSconosciuto && n.stato.c !== 'S' && n.stato.c !== 'C';
+    return true;
+  });
+  a.ignote = [...a.ignote, ...scartate];
+  a.nuove.sort((p, q) => p.titolo.localeCompare(q.titolo, 'it'));
+}
+
+function aggiornaBottoneCarica(){
+  const a = caricaPiano;
+  if (!a) return;
+  const nuove = a.nuove.filter(n => n.scelta).length;
+  const parti = [];
+  if (a.cambi.length) parti.push(`${fmt(a.cambi.length)} ${a.cambi.length === 1 ? 'modifica' : 'modifiche'}`);
+  if (nuove) parti.push(`${fmt(nuove)} ${nuove === 1 ? 'nuova libreria' : 'nuove librerie'}`);
+  const ok = $('carica-ok');
+  ok.style.display = parti.length ? '' : 'none';
+  ok.textContent = 'Applica ' + parti.join(' e ');
 }
 
 function mostraPiano(a, nomeFile){
@@ -1540,7 +1631,7 @@ function mostraPiano(a, nomeFile){
   const delta = a.cambi.reduce((t, c) => t + c.nuovo - c.r.copie, 0);
   const daRiconf = a.cambi.filter(c => c.r.copie_confermate != null).length;
   $('carica-tit').textContent = `Carica Excel in ${n.titolo}`;
-  $('carica-hint').textContent = `${nomeFile}: ${fmt(a.cambi.length)} da cambiare, ${fmt(a.uguali)} già uguali${a.vuote ? `, ${fmt(a.vuote)} con copie vuote (restano com'erano)` : ''}.`
+  $('carica-hint').textContent = `${nomeFile}: ${fmt(a.nuove.length)} ${a.nuove.length === 1 ? 'nuova' : 'nuove'}, ${fmt(a.cambi.length)} da cambiare, ${fmt(a.uguali)} già uguali${a.vuote ? `, ${fmt(a.vuote)} con copie vuote (restano com'erano)` : ''}.`
     + (a.cambi.length ? ` Copie assegnate ${delta >= 0 ? '+' : ''}${fmt(delta)}.` : '');
   const elenco = (tit, v) => v.length ? `<div class="carica-avviso">${esc(tit)} (${fmt(v.length)}): non vengono caricate.<small>${esc(v.slice(0, 12).join(' · '))}${v.length > 12 ? ' …' : ''}</small></div>` : '';
   $('carica-avvisi').innerHTML =
@@ -1549,14 +1640,21 @@ function mostraPiano(a, nomeFile){
     + elenco('Valori diversi per la stessa libreria tra i fogli', a.contrasti)
     + elenco('Copie non valide', a.errate)
     + elenco('Codice presente più volte in elenco', a.doppie)
-    + elenco('Non trovate in questo numero', a.ignote);
-  $('carica-ris').innerHTML = a.cambi.map(c => `<div class="ris-row"><div class="inf"><b>${esc(c.r.ragione_sociale)}</b><small>${esc(c.r.codice_cliente || '')} · ${esc(c.r.citta || '')}${c.r.copie_confermate != null ? ' · già confermata' : ''}</small></div><span class="da-a">${fmt(c.r.copie)} → ${fmt(c.nuovo)}</span></div>`).join('');
-  const ok = $('carica-ok');
-  ok.style.display = a.cambi.length ? '' : 'none';
-  ok.disabled = false;
-  ok.textContent = `Applica ${fmt(a.cambi.length)} ${a.cambi.length === 1 ? 'modifica' : 'modifiche'}`;
+    + elenco('Non riconosciute', a.ignote);
+  const htmlNuove = a.nuove.map((x, i) => `<label class="ris-row" style="cursor:pointer;margin:0;font-weight:400;color:inherit;"><input type="checkbox" data-nuova="${i}" style="width:18px;height:18px;flex:none;"${x.scelta ? ' checked' : ''} />`
+    + `<div class="inf"><b>${esc(x.titolo)}</b> <span class="badge ${x.stato.c}">${esc(x.stato.lab)}</span><small>${esc([x.codice, x.anag?.indirizzo ?? x.indirizzo, x.anag?.citta ?? x.citta, x.anag?.provincia ?? x.provincia].filter(Boolean).join(' · '))}${x.codiceSconosciuto ? ' · codice non trovato in anagrafica' : ''}${x.anag?.motivo ? ' · ' + esc(x.anag.motivo) : ''}</small></div>`
+    + `<span class="da-a">${fmt(x.copie)}${x.copieDefault ? ' (standard)' : ''}</span></label>`).join('');
+  $('carica-ris').innerHTML = (a.nuove.length ? `<p class="carica-sez">Librerie da aggiungere</p>${htmlNuove}` : '') + (a.cambi.length ? '<p class="carica-sez">Copie da cambiare</p>' : '') + a.cambi.map(c => `<div class="ris-row"><div class="inf"><b>${esc(c.r.ragione_sociale)}</b><small>${esc(c.r.codice_cliente || '')} · ${esc(c.r.citta || '')}${c.r.copie_confermate != null ? ' · già confermata' : ''}</small></div><span class="da-a">${fmt(c.r.copie)} → ${fmt(c.nuovo)}</span></div>`).join('');
+  $('carica-ok').disabled = false;
+  aggiornaBottoneCarica();
   $('carica-modal').classList.add('open');
 }
+$('carica-ris').addEventListener('change', e => {
+  const i = e.target.dataset.nuova;
+  if (i == null || !caricaPiano) return;
+  caricaPiano.nuove[Number(i)].scelta = e.target.checked;
+  aggiornaBottoneCarica();
+});
 const chiudiCarica = () => { $('carica-modal').classList.remove('open'); caricaPiano = null; };
 $('carica-close').addEventListener('click', chiudiCarica);
 $('carica-annulla').addEventListener('click', chiudiCarica);
@@ -1572,7 +1670,8 @@ async function leggiExcelCaricato(file){
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await file.arrayBuffer());
   const a = analizzaExcel(wb);
-  if (!a.fogli) { toast('Nel file non ho trovato le colonne Copie e Codice (o ID).', true); return; }
+  if (!a.fogli) { toast('Nel file non ho trovato le colonne giuste: servono Codice o Libreria, con Copie o Città.', true); return; }
+  await completaNuove(a);
   mostraPiano(a, file.name);
 }
 $('carica-file').addEventListener('change', async e => {
@@ -1604,9 +1703,33 @@ $('carica-ok').addEventListener('click', async () => {
       if (error) ko++; else ok++;
     }));
   }
+  const nuove = piano.nuove.filter(n => n.scelta);
+  let aggiunte = 0, nonAggiunte = 0;
+  for (let i = 0; i < nuove.length; i += 10) {
+    btn.textContent = `Aggiungo… ${i}/${nuove.length}`;
+    await Promise.all(nuove.slice(i, i + 10).map(async n => {
+      let libreriaId = n.libreriaId;
+      if (!libreriaId) {
+        const x = n.anag;
+        const { data, error } = await sb.from(TAB).insert({
+          codice_cliente:x?.codice_cliente || null, ragione_sociale:x?.ragione_sociale || n.nome,
+          indirizzo:(x?.indirizzo ?? n.indirizzo) || null, cap:(x?.cap ?? n.cap) || null, citta:(x?.citta ?? n.citta) || null, provincia:(x?.provincia ?? n.provincia) || null,
+          copie:n.copie, abbinamento:'caricamento Excel', note:n.codiceSconosciuto ? `Codice nel file: ${n.codice}` : null,
+        }).select('id').single();
+        if (error) { nonAggiunte++; return; }
+        libreriaId = data.id;
+      }
+      const { error } = await sb.from(TAB_DIST).insert({ numero_id:st.numeroId, libreria_id:libreriaId, copie:n.copie });
+      if (error) nonAggiunte++; else aggiunte++;
+    }));
+  }
   chiudiCarica();
   await caricaElenco();
-  toast(ko ? `Aggiornate ${fmt(ok)}, ${fmt(ko)} non riuscite: ricarica il file.` : `Copie aggiornate su ${fmt(ok)} librerie.`, !!ko);
+  const esito = [];
+  if (ok) esito.push(`Copie aggiornate su ${fmt(ok)}`);
+  if (aggiunte) esito.push(`${fmt(aggiunte)} ${aggiunte === 1 ? 'libreria aggiunta' : 'librerie aggiunte'}`);
+  const falliti = ko + nonAggiunte;
+  toast(`${esito.join(', ') || 'Nessuna modifica'}${falliti ? ` · ${fmt(falliti)} non riuscite: ricarica il file.` : '.'}`, !!falliti);
 });
 
 /* ---------- EMAIL AGENTI ---------- */
