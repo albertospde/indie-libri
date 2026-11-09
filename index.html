@@ -99,16 +99,16 @@
   #interne-tab td.num,#interne-tab th.num{ text-align:right; font-variant-numeric:tabular-nums; }
   #interne-tab tfoot td{ font-weight:800; border-bottom:0; }
   /* ---------- RUBRICA AGENTI ---------- */
-  #agenti-tab{ min-width:1280px; }
-  .reg-celle{ display:flex; flex-wrap:wrap; gap:4px; min-width:230px; }
+  .reg-celle{ display:flex; flex-wrap:nowrap; gap:4px; overflow:hidden; }
+  tr.aperta .reg-celle{ flex-wrap:wrap; }
   .reg-chip{ font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--cyan-dim); color:var(--text); white-space:nowrap; }
   .reg-altre{ font-size:11.5px; color:var(--text-dim); align-self:center; cursor:help; }
   .reg-scelta{ display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:4px 10px; max-height:170px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:8px 10px; }
   .reg-scelta label{ display:flex; align-items:center; gap:6px; margin:0; font-size:13.5px; font-weight:500; }
   .reg-scelta input{ width:auto; }
-  #agenti-tab a{ color:var(--cyan); text-decoration:none; }
-  #agenti-tab a:hover{ text-decoration:underline; }
-  #agenti-tab .vuoto-c{ color:var(--text-dim); }
+  table.uguale a{ color:var(--cyan); text-decoration:none; }
+  table.uguale a:hover{ text-decoration:underline; }
+  .vuoto-c{ color:var(--text-dim); }
   #agenti-tab tr.spenta td{ color:var(--text-dim); }
   #agente-modal textarea{ width:100%; resize:vertical; font:inherit; }
   .spunta{ display:flex; align-items:center; gap:8px; font-size:14.5px; }
@@ -140,7 +140,20 @@
   /* ---------- TABELLA ---------- */
   .tab-wrap{ overflow-x:auto; }
   table{ width:100%; border-collapse:collapse; min-width:1180px; }
-  td.agente{ font-size:12.5px; max-width:170px; }
+  /* Righe tutte alte uguali: il dettaglio si apre cliccando la riga, le colonne si allargano trascinando il bordo */
+  table.uguale{ table-layout:fixed; min-width:0; }
+  table.uguale th{ position:relative; overflow:hidden; text-overflow:ellipsis; }
+  table.uguale td{ height:44px; padding-top:0; padding-bottom:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  table.uguale tbody tr{ cursor:pointer; }
+  table.uguale tr.aperta td{ height:auto; padding-top:10px; padding-bottom:10px; white-space:normal; overflow-wrap:anywhere; vertical-align:top; }
+  table.uguale tr:not(.aperta) .motivo{ display:none; }
+  table.uguale .link-btn{ display:inline; margin:0 0 0 6px; }
+  table.uguale td .btn-secondary{ padding:5px 10px; font-size:13px; white-space:nowrap; }
+  .col-presa{ position:absolute; top:0; right:0; width:10px; height:100%; cursor:col-resize; touch-action:none; }
+  .col-presa::after{ content:''; position:absolute; top:25%; bottom:25%; right:3px; width:2px; border-radius:2px; background:var(--border); }
+  .col-presa:hover::after{ background:var(--cyan); }
+  .tab-aiuto{ font-size:12.5px; color:var(--text-dim); margin:0 0 8px; }
+  td.agente{ font-size:12.5px; }
   td.agente .senza{ color:var(--text-dim); }
   th{ text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-dim); padding:8px 6px; border-bottom:2px solid var(--border); white-space:nowrap; }
   th[data-sort]{ cursor:pointer; user-select:none; }
@@ -226,8 +239,13 @@
       <button class="side-item active" type="button" data-sezione="home"><span class="ico">🏠</span>Home</button>
       <div class="side-group">Rivista</div>
       <button class="side-item" type="button" data-sezione="rivista"><span class="ico">📰</span>Distribuzione Rivista</button>
-      <div class="side-group">Agenti</div>
-      <button class="side-item" type="button" data-sezione="agenti"><span class="ico">👥</span>Indirizzi ed anagrafiche agenti</button>
+      <div class="side-group">INDIRIZZARI</div>
+      <button class="side-item" type="button" data-sezione="agenti"><span class="ico">👥</span>Agenti</button>
+      <button class="side-item" type="button" data-sezione="uffici_stampa"><span class="ico">📣</span>Uffici Stampa</button>
+      <button class="side-item" type="button" data-sezione="giornalisti"><span class="ico">🗞️</span>Giornalisti</button>
+      <button class="side-item" type="button" data-sezione="influencer"><span class="ico">📱</span>Influencer</button>
+      <button class="side-item" type="button" data-sezione="gruppi_lettura"><span class="ico">📚</span>Gruppi di lettura</button>
+      <button class="side-item" type="button" data-sezione="case_editrici"><span class="ico">🏛️</span>Case editrici</button>
     </nav>
 
     <div id="section-home">
@@ -237,18 +255,41 @@
     </div>
 
     <div id="section-agenti" style="display:none;">
-      <h1 class="sezione-titolo">Indirizzi ed anagrafiche agenti</h1>
+      <h1 class="sezione-titolo">Agenti</h1>
       <div class="card">
         <div class="toolbar">
           <span class="sync-line" id="agenti-info">Caricamento…</span>
           <span class="spacer"></span>
           <select id="agenti-reg" aria-label="Filtra per regione" style="width:auto;"></select>
+          <button class="btn-secondary" id="agenti-export" type="button">📥 Esporta</button>
           <button class="btn-primary" id="agente-new" type="button" style="padding:9px 14px;font-size:14.5px;">＋ Aggiungi agente</button>
         </div>
+        <p class="tab-aiuto">Clicca una riga per leggerla per intero. Trascina il bordo di un'intestazione per allargare la colonna.</p>
         <div class="tab-wrap">
-          <table id="agenti-tab">
+          <table id="agenti-tab" class="uguale">
             <thead><tr id="agenti-head"></tr></thead>
             <tbody id="agenti-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="section-indirizzario" style="display:none;">
+      <h1 class="sezione-titolo" id="ind-titolo"></h1>
+      <div class="card">
+        <div class="toolbar">
+          <span class="sync-line" id="ind-info">Caricamento…</span>
+          <span class="spacer"></span>
+          <input id="ind-q" type="search" placeholder="Cerca…" aria-label="Cerca nell'indirizzario" autocomplete="off" style="width:220px;" />
+          <select id="ind-reg" aria-label="Filtra per regione" style="width:auto;"></select>
+          <button class="btn-secondary" id="ind-export" type="button">📥 Esporta</button>
+          <button class="btn-primary" id="ind-new" type="button" style="padding:9px 14px;font-size:14.5px;">＋ Aggiungi nuovo</button>
+        </div>
+        <p class="tab-aiuto">Clicca una riga per leggerla per intero. Trascina il bordo di un'intestazione per allargare la colonna.</p>
+        <div class="tab-wrap">
+          <table id="ind-tab" class="uguale">
+            <thead><tr id="ind-head"></tr></thead>
+            <tbody id="ind-body"></tbody>
           </table>
         </div>
       </div>
@@ -277,8 +318,13 @@
       </div>
 
       <div class="card">
-        <h2 class="tit">Copie per fiere e saloni</h2>
-        <p class="hint">Le copie che tieni per noi su questo numero. Entrano nel totale delle distribuite.</p>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+          <div>
+            <h2 class="tit">Copie per fiere e saloni</h2>
+            <p class="hint">Le copie che tieni per noi su questo numero. Entrano nel totale delle distribuite.</p>
+          </div>
+          <button class="btn-secondary" id="interne-export" type="button">📥 Esporta</button>
+        </div>
         <form class="interne-form" id="interne-form">
           <div class="f-dest"><label for="i-dest">Fiera o salone *</label><input id="i-dest" type="text" autocomplete="off" /></div>
           <div><label for="i-data">Data</label><input id="i-data" type="date" /></div>
@@ -286,7 +332,7 @@
           <div class="f-note"><label for="i-note">Note</label><input id="i-note" type="text" autocomplete="off" /></div>
           <button class="btn-primary" type="submit" style="padding:10px 14px;font-size:14.5px;">＋ Aggiungi</button>
         </form>
-        <div class="tab-wrap"><table id="interne-tab"><tbody id="interne-body"></tbody><tfoot id="interne-foot"></tfoot></table></div>
+        <div class="tab-wrap"><table id="interne-tab" class="uguale"><tbody id="interne-body"></tbody><tfoot id="interne-foot"></tfoot></table></div>
       </div>
 
       <div class="card">
@@ -317,8 +363,9 @@
       </div>
 
       <div class="card">
+        <p class="tab-aiuto">Clicca una riga per leggerla per intero. Trascina il bordo di un'intestazione per allargare la colonna.</p>
         <div class="tab-wrap">
-          <table id="tab">
+          <table id="tab" class="uguale">
             <thead><tr id="tab-head"></tr></thead>
             <tbody id="tab-body"></tbody>
           </table>
@@ -365,6 +412,32 @@
       <div class="largo"><label for="a-note">Note</label><textarea id="a-note" rows="2"></textarea></div>
     </div>
     <div class="azioni">
+      <button class="btn-primary" type="submit" style="padding:10px 18px;font-size:15px;">Salva</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal-bg" id="ind-modal">
+  <form class="modal" id="ind-form" role="dialog" aria-modal="true" aria-labelledby="ind-tit">
+    <h3><span id="ind-tit">Aggiungi nuovo</span><button class="x-btn" id="ind-close" type="button" aria-label="Chiudi">×</button></h3>
+    <p class="hint">Scrivi almeno il nome, il cognome o la ragione sociale.</p>
+    <div class="campi">
+      <div><label for="d-nome">Nome</label><input id="d-nome" type="text" autocomplete="off" /></div>
+      <div><label for="d-cognome">Cognome</label><input id="d-cognome" type="text" autocomplete="off" /></div>
+      <div class="largo"><label for="d-ragione">Ragione sociale</label><input id="d-ragione" type="text" autocomplete="off" /></div>
+      <div class="largo" id="d-testata-w"><label for="d-testata">Testata</label><input id="d-testata" type="text" autocomplete="off" /></div>
+      <div class="largo" id="d-canali-w"><label for="d-canali">Canali social</label><input id="d-canali" type="text" placeholder="Instagram @nome, TikTok @nome…" autocomplete="off" /></div>
+      <div class="largo" id="d-part-w"><label for="d-part">N° partecipanti</label><input id="d-part" type="number" min="0" step="1" /></div>
+      <div class="largo"><label for="d-ind">Indirizzo</label><input id="d-ind" type="text" autocomplete="off" /></div>
+      <div><label for="d-cap">CAP</label><input id="d-cap" type="text" autocomplete="off" /></div>
+      <div><label for="d-citta">Città</label><input id="d-citta" type="text" autocomplete="off" /></div>
+      <div class="largo"><label for="d-reg">Regione</label><select id="d-reg"></select></div>
+      <div><label for="d-tel">Telefono</label><input id="d-tel" type="tel" autocomplete="off" /></div>
+      <div><label for="d-email">Email</label><input id="d-email" type="email" autocomplete="off" /></div>
+    </div>
+    <div class="azioni">
+      <button class="btn-secondary btn-danger" id="ind-del" type="button">Elimina</button>
+      <span class="spacer"></span>
       <button class="btn-primary" type="submit" style="padding:10px 18px;font-size:15px;">Salva</button>
     </div>
   </form>
@@ -427,6 +500,14 @@ const TAB_INT = 'indie_rivista_copie_interne';
 const TAB_AGENTI = 'indie_agenti_rubrica';
 const COPIE_DEFAULT = 50;
 const COPIE_OPZIONI = [0, 25, 50, 75, 100, 150, 200, 300, 400, 500];
+const TAB_IND = 'indie_indirizzari';
+const TIPI_IND = {
+  uffici_stampa:  { titolo:'Uffici Stampa',     ordine:'ragione_sociale' },
+  giornalisti:    { titolo:'Giornalisti',       ordine:'cognome', extra:{ key:'testata', label:'Testata', w:170 } },
+  influencer:     { titolo:'Influencer',        ordine:'cognome', extra:{ key:'canali_social', label:'Canali social', w:210 } },
+  gruppi_lettura: { titolo:'Gruppi di lettura', ordine:'ragione_sociale', extra:{ key:'n_partecipanti', label:'N° partecipanti', w:120 } },
+  case_editrici:  { titolo:'Case editrici',     ordine:'ragione_sociale' },
+};
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -494,15 +575,74 @@ function mostraSezione(id){
   $('section-home').style.display = id === 'home' ? 'flex' : 'none';
   $('section-rivista').style.display = id === 'rivista' ? 'block' : 'none';
   $('section-agenti').style.display = id === 'agenti' ? 'block' : 'none';
+  $('section-indirizzario').style.display = TIPI_IND[id] ? 'block' : 'none';
   document.querySelectorAll('.side-item').forEach(b => b.classList.toggle('active', b.dataset.sezione === id));
   if (id === 'rivista' && !elencoCaricato) { elencoCaricato = true; caricaElenco(); }
   if (id === 'agenti') caricaAgenti();
+  if (TIPI_IND[id]) apriIndirizzario(id);
 }
 document.querySelector('.sidebar').addEventListener('click', e => {
   const b = e.target.closest('.side-item');
   if (b) mostraSezione(b.dataset.sezione);
 });
 $('home-altra').addEventListener('click', nuovaFrase);
+
+/* ---------- TABELLE: RIGHE UGUALI, COLONNE ALLARGABILI ---------- */
+const LARG_KEY = 'indie-colonne';
+function larghezzeSalvate(){ try { return JSON.parse(localStorage.getItem(LARG_KEY)) || {}; } catch (_e) { return {}; } }
+const PRESA = '<span class="col-presa" title="Trascina per allargare"></span>';
+const larghezzaTabella = larg => `max(100%, ${larg.reduce((t, w) => t + w, 0)}px)`;
+
+// colonne: [{ k, w }]. Le larghezze scelte a mano restano su questo browser
+function impostaColonne(tab, chiave, colonne){
+  const salvate = larghezzeSalvate()[chiave] || {};
+  const larg = colonne.map(c => salvate[c.k] ?? c.w);
+  let cg = tab.querySelector('colgroup');
+  if (!cg) { cg = document.createElement('colgroup'); tab.prepend(cg); }
+  cg.innerHTML = larg.map(w => `<col style="width:${w}px">`).join('');
+  tab.style.width = larghezzaTabella(larg);
+  tab.dataset.chiave = chiave;
+  tab.dataset.colonne = colonne.map(c => c.k).join(',');
+}
+
+let trascina = null, appenaTrascinato = false;
+document.addEventListener('pointerdown', e => {
+  const presa = e.target.closest?.('.col-presa');
+  if (!presa) return;
+  e.preventDefault();
+  const th = presa.parentElement, tab = th.closest('table'), celle = [...th.parentElement.children];
+  const cols = [...tab.querySelectorAll('col')], larg = celle.map(c => c.offsetWidth), i = celle.indexOf(th);
+  cols.forEach((c, n) => { c.style.width = larg[n] + 'px'; });
+  trascina = { tab, cols, larg, i, x:e.clientX, w:larg[i] };
+});
+document.addEventListener('pointermove', e => {
+  if (!trascina) return;
+  const t = trascina;
+  t.larg[t.i] = Math.max(50, t.w + e.clientX - t.x);
+  t.cols[t.i].style.width = t.larg[t.i] + 'px';
+  t.tab.style.width = larghezzaTabella(t.larg);
+});
+document.addEventListener('pointerup', () => {
+  if (!trascina) return;
+  const { tab, larg } = trascina;
+  trascina = null;
+  appenaTrascinato = true; // il rilascio non deve riordinare la colonna
+  setTimeout(() => { appenaTrascinato = false; });
+  try {
+    const tutte = larghezzeSalvate();
+    tutte[tab.dataset.chiave] = Object.fromEntries(tab.dataset.colonne.split(',').map((k, n) => [k, larg[n]]));
+    localStorage.setItem(LARG_KEY, JSON.stringify(tutte));
+  } catch (_e) {}
+});
+document.addEventListener('click', e => {
+  if (appenaTrascinato) { e.stopPropagation(); e.preventDefault(); }
+}, true);
+document.addEventListener('click', e => {
+  const tr = e.target.closest?.('table.uguale tbody tr');
+  if (!tr || tr.querySelector('td.vuoto') || e.target.closest('a,button,select,input,textarea,label')) return;
+  if (String(window.getSelection())) return; // chi seleziona un testo per copiarlo non apre la riga
+  tr.classList.toggle('aperta');
+});
 
 /* ---------- ACCESSO ---------- */
 async function checkSession(){
@@ -719,11 +859,15 @@ function rigaHtml(r){
   </tr>`;
 }
 
+const LARG_RIVISTA = [75, 260, 200, 62, 120, 52, 160, 130, 110, 170, 44];
+impostaColonne($('tab'), 'rivista', COLS.map((c, i) => ({ k:c.key || 'azioni', w:LARG_RIVISTA[i] })));
+impostaColonne($('interne-tab'), 'interne', [{ k:'dest', w:320 }, { k:'data', w:110 }, { k:'copie', w:90 }, { k:'note', w:320 }, { k:'azioni', w:44 }]);
+
 function disegnaTabella(){
   $('tab-head').innerHTML = COLS.map(c => {
     if (!c.key) return '<th></th>';
     const arrow = st.sortKey === c.key ? `<span class="arrow">${st.sortDir > 0 ? '▲' : '▼'}</span>` : '';
-    return `<th data-sort="${c.key}">${c.label}${arrow}</th>`;
+    return `<th data-sort="${c.key}">${c.label}${arrow}${PRESA}</th>`;
   }).join('');
   $('tab-body').innerHTML = st.filtered.length
     ? st.filtered.map(rigaHtml).join('')
@@ -732,7 +876,10 @@ function disegnaTabella(){
 
 function ridisegnaRiga(r){
   const tr = $('tab-body').querySelector(`tr[data-id="${r.id}"]`);
-  if (tr) tr.outerHTML = rigaHtml(r);
+  if (!tr) return;
+  const aperta = tr.classList.contains('aperta');
+  tr.outerHTML = rigaHtml(r);
+  if (aperta) $('tab-body').querySelector(`tr[data-id="${r.id}"]`).classList.add('aperta');
 }
 
 function disegnaTotali(){
@@ -1309,6 +1456,86 @@ $('export-btn').addEventListener('click', async () => {
   }
 });
 
+$('interne-export').addEventListener('click', async () => {
+  if (!st.interne.length) { toast('Nessuna copia per fiere e saloni da esportare.', true); return; }
+  const btn = $('interne-export');
+  btn.disabled = true;
+  try {
+    await caricaExcelJS();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Indie Libri';
+    aggiungiFoglioInterne(wb);
+    const buf = await wb.xlsx.writeBuffer();
+    scaricaFile(new Blob([buf], { type:XLSX_MIME }), nomeFileDistribuzione().replace('DistribuzioneRivista', 'FiereSaloni') + '.xlsx');
+  } catch (e) {
+    console.error(e);
+    toast('Esportazione non riuscita: ' + (e.message || e), true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Esporta un indirizzario con le righe che si vedono a video. colonne: [{ label, w (pixel a video), val }]
+async function esportaElenco(btn, { titolo, colonne, righe, filtri }){
+  if (!righe.length) { toast('Nessuna riga da esportare.', true); return; }
+  btn.disabled = true;
+  try {
+    await caricaExcelJS();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Indie Libri';
+    const HEAD = 3, N = colonne.length;
+    const ws = wb.addWorksheet(nomeFoglio(titolo, new Set()), {
+      views:[{ state:'frozen', ySplit:HEAD, showGridLines:false }],
+      pageSetup:{ orientation:'landscape', paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0, margins:{ left:.4, right:.4, top:.5, bottom:.6, header:.3, footer:.3 } },
+      headerFooter:{ oddFooter:`&LIndie Libri - ${titolo}&RPagina &P di &N` },
+    });
+    ws.columns = colonne.map(c => ({ width:Math.max(8, Math.round(c.w / 6.5)) }));
+    ws.pageSetup.printTitlesRow = `${HEAD}:${HEAD}`;
+    const fascia = (r, testo, size, colore, alt, bold) => {
+      ws.mergeCells(r, 1, r, N);
+      const c = ws.getCell(r, 1);
+      c.value = testo;
+      c.font = { name:'Calibri', size, bold, color:{ argb:XL.bianco } };
+      c.fill = riempi(colore);
+      c.alignment = { vertical:'middle', indent:1 };
+      ws.getRow(r).height = alt;
+    };
+    fascia(1, titolo, 20, XL.scuro, 36, true);
+    fascia(2, `${fmt(righe.length)} ${righe.length === 1 ? 'contatto' : 'contatti'}  ·  Esportato il ${new Date().toLocaleDateString('it-IT')}${filtri.length ? '  ·  Filtri: ' + filtri.join(', ') : ''}`, 12, XL.medio, 24, false);
+    const lato = { style:'thin', color:{ argb:XL.bordo } };
+    const bordi = { top:lato, left:lato, bottom:lato, right:lato };
+    const head = ws.getRow(HEAD);
+    head.values = colonne.map(c => c.label);
+    head.height = 32;
+    head.eachCell(c => {
+      c.font = { name:'Calibri', size:11, bold:true, color:{ argb:XL.bianco } };
+      c.fill = riempi(XL.scuro);
+      c.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+      c.border = bordi;
+    });
+    righe.forEach((r, i) => {
+      const row = ws.addRow(colonne.map(c => c.val(r) ?? ''));
+      row.height = 18;
+      for (let n = 1; n <= N; n++) {
+        const c = row.getCell(n);
+        c.font = { name:'Calibri', size:11, color:{ argb:XL.testo } };
+        c.fill = riempi(i % 2 ? XL.chiaro : XL.bianco);
+        c.border = bordi;
+        c.alignment = { vertical:'middle' };
+      }
+    });
+    ws.autoFilter = { from:{ row:HEAD, column:1 }, to:{ row:HEAD + righe.length, column:N } };
+    const buf = await wb.xlsx.writeBuffer();
+    const parte = titolo.replace(/[^A-Za-z0-9]+/g, '');
+    scaricaFile(new Blob([buf], { type:XLSX_MIME }), `IndieLibri_${parte}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  } catch (e) {
+    console.error(e);
+    toast('Esportazione non riuscita: ' + (e.message || e), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 /* ---------- ESTRAI PER AGENTE ---------- */
 const SENZA_AGENTE_NOME = 'Senza agente';
 const agentiDelNumero = () => [...new Set(st.rows.flatMap(r => r._agenti))].sort((a, b) => a.localeCompare(b, 'it'));
@@ -1836,7 +2063,7 @@ $('email-btn').addEventListener('click', async () => {
 });
 
 /* =====================================================================
-   INDIRIZZI ED ANAGRAFICHE AGENTI
+   INDIRIZZARI: AGENTI
    ===================================================================== */
 // Le modifiche restano in indie_agenti_rubrica: agenti_pde governa gli accessi delle app PDE e da qui non si tocca
 let agenti = [], agenteInModifica = null;
@@ -1884,16 +2111,22 @@ function cellaRegioni(a){
 
 const nomeOrdine = a => `${a.cognome || ''} ${a.nome || ''}`;
 const COL_AGENTI = [
-  { key:'cognome',   label:'Cognome',   val:a => a.cognome },
-  { key:'nome',      label:'Nome',      val:a => a.nome },
-  { key:'codice',    label:'Codice',    val:a => a.codice },
-  { key:'regioni',   label:'Regioni di competenza', val:a => regioniDi(a).map(nomeRegione).join(', ') },
-  { key:'email',     label:'Email',     val:a => a.email },
-  { key:'telefono',  label:'Telefono',  val:a => a.telefono },
-  { key:'indirizzo', label:'Indirizzo', val:a => a.indirizzo },
-  { key:'note',      label:'Note',      val:a => a.note },
-  { key:'stato',     label:'Stato',     val:a => a.attivo ? 'Attivo' : 'Non attivo' },
+  { key:'cognome',   label:'Cognome',   w:130, val:a => a.cognome },
+  { key:'nome',      label:'Nome',      w:110, val:a => a.nome },
+  { key:'codice',    label:'Codice',    w:90,  val:a => a.codice },
+  { key:'regioni',   label:'Regioni di competenza', w:240, val:a => regioniDi(a).map(nomeRegione).join(', ') },
+  { key:'email',     label:'Email',     w:210, val:a => a.email },
+  { key:'telefono',  label:'Telefono',  w:130, val:a => a.telefono },
+  { key:'indirizzo', label:'Indirizzo', w:200, val:a => a.indirizzo },
+  { key:'note',      label:'Note',      w:150, val:a => a.note },
+  { key:'stato',     label:'Stato',     w:100, val:a => a.attivo ? 'Attivo' : 'Non attivo' },
 ];
+impostaColonne($('agenti-tab'), 'agenti', [...COL_AGENTI.map(c => ({ k:c.key, w:c.w })), { k:'azioni', w:110 }]);
+let agentiVisibili = [];
+$('agenti-export').addEventListener('click', e => {
+  const sel = $('agenti-reg');
+  esportaElenco(e.currentTarget, { titolo:'Agenti', colonne:COL_AGENTI, righe:agentiVisibili, filtri:sel.value ? [sel.options[sel.selectedIndex].text] : [] });
+});
 const ordineAgenti = { key:'cognome', dir:1 };
 $('agenti-head').addEventListener('click', e => {
   const th = e.target.closest('th[data-ordina]');
@@ -1918,9 +2151,10 @@ function disegnaAgenti(){
     return (p && q ? p.localeCompare(q, 'it', { numeric:true, sensitivity:'base' }) * ordineAgenti.dir : 0)
       || nomeOrdine(x.a).localeCompare(nomeOrdine(y.a), 'it', { sensitivity:'base' });
   });
+  agentiVisibili = righe.map(r => r.a);
   $('agenti-head').innerHTML = COL_AGENTI.map(c => {
     const su = ordineAgenti.key === c.key;
-    return `<th data-ordina="${c.key}" aria-sort="${su ? (ordineAgenti.dir > 0 ? 'ascending' : 'descending') : 'none'}" title="Ordina A/Z o Z/A" style="cursor:pointer;user-select:none;">${c.label}${su ? `<span class="arrow">${ordineAgenti.dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`;
+    return `<th data-ordina="${c.key}" aria-sort="${su ? (ordineAgenti.dir > 0 ? 'ascending' : 'descending') : 'none'}" title="Ordina A/Z o Z/A" style="cursor:pointer;user-select:none;">${c.label}${su ? `<span class="arrow">${ordineAgenti.dir > 0 ? '▲' : '▼'}</span>` : ''}${PRESA}</th>`;
   }).join('') + '<th></th>';
   $('agenti-body').innerHTML = righe.length ? righe.map(({ a, i }) => `<tr class="${a.attivo ? '' : 'spenta'}">
     <td class="nome">${a.cognome ? esc(a.cognome) : vuoto}</td>
@@ -1928,11 +2162,11 @@ function disegnaAgenti(){
     <td class="cod">${a.codice ? esc(a.codice) : vuoto}</td>
     <td>${cellaRegioni(a)}</td>
     <td>${a.email ? `<a href="mailto:${esc(a.email)}">${esc(a.email)}</a>` : vuoto}</td>
-    <td style="white-space:nowrap;">${a.telefono ? `<a href="tel:${esc(a.telefono.replace(/[^\d+]/g, ''))}">${esc(a.telefono)}</a>` : vuoto}</td>
+    <td>${a.telefono ? `<a href="tel:${esc(a.telefono.replace(/[^\d+]/g, ''))}">${esc(a.telefono)}</a>` : vuoto}</td>
     <td>${a.indirizzo ? esc(a.indirizzo) : vuoto}</td>
     <td>${a.note ? esc(a.note) : vuoto}</td>
     <td><span class="badge ${a.attivo ? 'A' : 'N'}">${a.attivo ? 'Attivo' : 'Non attivo'}</span></td>
-    <td style="width:1%;"><button class="btn-secondary" type="button" data-agente="${i}">✏ Modifica</button></td>
+    <td><button class="btn-secondary" type="button" data-agente="${i}">✏ Modifica</button></td>
   </tr>`).join('') : `<tr><td colspan="${COL_AGENTI.length + 1}" class="vuoto">${reg ? 'Nessun agente per questa regione.' : 'Nessun agente in elenco.'}</td></tr>`;
 }
 
@@ -1991,6 +2225,178 @@ $('agente-form').addEventListener('submit', async e => {
   chiudiAgente();
   await caricaAgenti();
   toast(a ? 'Agente aggiornato.' : `Agente aggiunto: ${nome} ${cognome}.`);
+});
+
+/* =====================================================================
+   INDIRIZZARI: UFFICI STAMPA, GIORNALISTI, INFLUENCER, GRUPPI DI LETTURA, CASE EDITRICI
+   ===================================================================== */
+let indTipo = null, indRighe = [], indVisibili = [], indInModifica = null;
+const ordineInd = { key:'cognome', dir:1 };
+const denominazione = r => r.ragione_sociale || [r.nome, r.cognome].filter(Boolean).join(' ');
+
+function colonneInd(){
+  const base = k => ({ key:k, val:r => r[k] });
+  const extra = TIPI_IND[indTipo].extra;
+  return [
+    { ...base('nome'), label:'Nome', w:110 },
+    { ...base('cognome'), label:'Cognome', w:120 },
+    { ...base('ragione_sociale'), label:'Ragione sociale', w:200 },
+    ...(extra ? [{ ...base(extra.key), label:extra.label, w:extra.w }] : []),
+    { ...base('email'), label:'Email', w:210 },
+    { ...base('telefono'), label:'Telefono', w:120 },
+    { ...base('indirizzo'), label:'Indirizzo', w:200 },
+    { ...base('cap'), label:'CAP', w:65 },
+    { ...base('citta'), label:'Città', w:120 },
+    { key:'regione', label:'Regione', w:120, val:r => r.regione ? nomeRegione(r.regione) : null },
+  ];
+}
+
+async function apriIndirizzario(tipo){
+  const cfg = TIPI_IND[tipo];
+  indTipo = tipo;
+  indRighe = [];
+  ordineInd.key = cfg.ordine;
+  ordineInd.dir = 1;
+  $('ind-titolo').textContent = cfg.titolo;
+  $('ind-q').value = '';
+  $('ind-info').textContent = 'Caricamento…';
+  impostaColonne($('ind-tab'), 'ind-' + tipo, [...colonneInd().map(c => ({ k:c.key, w:c.w })), { k:'azioni', w:110 }]);
+  disegnaInd();
+  await caricaInd();
+}
+
+async function caricaInd(){
+  const tipo = indTipo, tutte = [];
+  for (let da = 0; ; da += 1000) {
+    const { data, error } = await sb.from(TAB_IND).select('*').eq('tipo', tipo).order('id').range(da, da + 999);
+    if (tipo !== indTipo) return; // nel frattempo è stata aperta un'altra sezione
+    if (error) {
+      console.error(error);
+      const negato = error.code === '42501';
+      $('ind-info').innerHTML = `<span style="color:var(--danger);font-weight:700;">${negato ? 'La tua utenza non è abilitata a questa sezione.' : 'Errore di caricamento: ' + esc(error.message)}</span>`;
+      return;
+    }
+    tutte.push(...data);
+    if (data.length < 1000) break;
+  }
+  indRighe = tutte;
+  const sel = $('ind-reg'), cur = sel.value;
+  const usate = REGIONI.filter(r => indRighe.some(x => x.regione === r));
+  sel.innerHTML = '<option value="">Tutte le regioni</option>' + usate.map(r => `<option value="${esc(r)}">${esc(nomeRegione(r))}</option>`).join('');
+  sel.value = usate.includes(cur) ? cur : '';
+  disegnaInd();
+}
+
+function disegnaInd(){
+  const colonne = colonneInd(), reg = $('ind-reg').value;
+  const parole = norm($('ind-q').value).split(/\s+/).filter(Boolean);
+  const righe = indRighe.filter(r => {
+    if (reg && r.regione !== reg) return false;
+    const testo = norm(colonne.map(c => c.val(r) ?? '').join(' '));
+    return parole.every(p => testo.includes(p));
+  });
+  const col = colonne.find(c => c.key === ordineInd.key);
+  const testo = r => String(col.val(r) ?? '');
+  // I campi vuoti restano in fondo, in entrambi i versi
+  righe.sort((x, y) => {
+    const p = testo(x), q = testo(y);
+    if (!p !== !q) return p ? -1 : 1;
+    return (p.localeCompare(q, 'it', { numeric:true, sensitivity:'base' }) * ordineInd.dir)
+      || denominazione(x).localeCompare(denominazione(y), 'it', { sensitivity:'base' });
+  });
+  indVisibili = righe;
+  const n = indRighe.length;
+  $('ind-info').textContent = `${fmt(n)} ${n === 1 ? 'contatto' : 'contatti'}${righe.length !== n ? ` · ${fmt(righe.length)} visibili` : ''}`;
+  $('ind-head').innerHTML = colonne.map(c => {
+    const su = ordineInd.key === c.key;
+    return `<th data-ordina="${c.key}" aria-sort="${su ? (ordineInd.dir > 0 ? 'ascending' : 'descending') : 'none'}" title="Ordina A/Z o Z/A" style="cursor:pointer;user-select:none;">${c.label}${su ? `<span class="arrow">${ordineInd.dir > 0 ? '▲' : '▼'}</span>` : ''}${PRESA}</th>`;
+  }).join('') + '<th></th>';
+  const vuoto = '<span class="vuoto-c">—</span>';
+  const cella = (c, r) => {
+    const v = c.val(r);
+    if (v == null || v === '') return vuoto;
+    if (c.key === 'email') return `<a href="mailto:${esc(v)}">${esc(v)}</a>`;
+    if (c.key === 'telefono') return `<a href="tel:${esc(String(v).replace(/[^\d+]/g, ''))}">${esc(v)}</a>`;
+    return esc(v);
+  };
+  $('ind-body').innerHTML = righe.length ? righe.map(r => `<tr>
+    ${colonne.map(c => `<td${c.key === 'ragione_sociale' ? ' class="nome"' : ''}>${cella(c, r)}</td>`).join('')}
+    <td><button class="btn-secondary" type="button" data-ind="${r.id}">✏ Modifica</button></td>
+  </tr>`).join('') : `<tr><td colspan="${colonne.length + 1}" class="vuoto">${n ? 'Nessun contatto con questi filtri.' : 'Ancora nessun contatto: comincia da Aggiungi nuovo.'}</td></tr>`;
+}
+
+$('ind-q').addEventListener('input', disegnaInd);
+$('ind-reg').addEventListener('change', disegnaInd);
+$('ind-head').addEventListener('click', e => {
+  const th = e.target.closest('th[data-ordina]');
+  if (!th) return;
+  if (ordineInd.key === th.dataset.ordina) ordineInd.dir *= -1;
+  else { ordineInd.key = th.dataset.ordina; ordineInd.dir = 1; }
+  disegnaInd();
+});
+$('ind-export').addEventListener('click', e => {
+  const filtri = [], q = $('ind-q').value.trim(), sel = $('ind-reg');
+  if (q) filtri.push(`ricerca "${q}"`);
+  if (sel.value) filtri.push(sel.options[sel.selectedIndex].text);
+  esportaElenco(e.currentTarget, { titolo:TIPI_IND[indTipo].titolo, colonne:colonneInd(), righe:indVisibili, filtri });
+});
+
+$('d-reg').innerHTML = '<option value="">—</option>' + REGIONI.map(r => `<option value="${esc(r)}">${esc(nomeRegione(r))}</option>`).join('');
+const CAMPI_IND = { 'd-nome':'nome', 'd-cognome':'cognome', 'd-ragione':'ragione_sociale', 'd-testata':'testata', 'd-canali':'canali_social', 'd-part':'n_partecipanti', 'd-ind':'indirizzo', 'd-cap':'cap', 'd-citta':'citta', 'd-reg':'regione', 'd-tel':'telefono', 'd-email':'email' };
+
+function apriInd(r){
+  indInModifica = r;
+  const cfg = TIPI_IND[indTipo], extra = cfg.extra?.key;
+  $('ind-tit').textContent = r ? `Modifica ${denominazione(r)}` : `Aggiungi nuovo · ${cfg.titolo}`;
+  Object.entries(CAMPI_IND).forEach(([id, k]) => { $(id).value = r?.[k] ?? ''; });
+  $('d-testata-w').style.display = extra === 'testata' ? '' : 'none';
+  $('d-canali-w').style.display = extra === 'canali_social' ? '' : 'none';
+  $('d-part-w').style.display = extra === 'n_partecipanti' ? '' : 'none';
+  $('ind-del').style.display = r ? '' : 'none';
+  $('ind-modal').classList.add('open');
+  $('d-nome').focus();
+}
+function chiudiInd(){ $('ind-modal').classList.remove('open'); }
+$('ind-new').addEventListener('click', () => apriInd(null));
+$('ind-close').addEventListener('click', chiudiInd);
+$('ind-modal').addEventListener('click', e => { if (e.target === $('ind-modal')) chiudiInd(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') chiudiInd(); });
+$('ind-body').addEventListener('click', e => {
+  const b = e.target.closest('button[data-ind]');
+  if (b) apriInd(indRighe.find(r => r.id === Number(b.dataset.ind)));
+});
+$('ind-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const v = id => $(id).value.trim() || null;
+  const extra = TIPI_IND[indTipo].extra?.key;
+  const riga = { aggiornato_il:new Date().toISOString(), aggiornato_da:currentUser?.email || null };
+  Object.entries(CAMPI_IND).forEach(([id, k]) => { riga[k] = v(id); });
+  // Un campo nascosto non viene salvato
+  ['testata', 'canali_social', 'n_partecipanti'].filter(k => k !== extra).forEach(k => { riga[k] = null; });
+  riga.email = riga.email?.toLowerCase() || null;
+  if (!riga.nome && !riga.cognome && !riga.ragione_sociale) { toast('Scrivi almeno il nome, il cognome o la ragione sociale.', true); return; }
+  if (riga.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(riga.email)) { toast('L\'indirizzo email non è valido.', true); return; }
+  if (riga.n_partecipanti != null) {
+    riga.n_partecipanti = Number(riga.n_partecipanti);
+    if (!Number.isInteger(riga.n_partecipanti) || riga.n_partecipanti < 0) { toast('Il numero di partecipanti deve essere un intero.', true); return; }
+  }
+  const r = indInModifica;
+  const { error } = r
+    ? await sb.from(TAB_IND).update(riga).eq('id', r.id)
+    : await sb.from(TAB_IND).insert({ ...riga, tipo:indTipo });
+  if (error) { toast('Non salvato: ' + error.message, true); return; }
+  chiudiInd();
+  await caricaInd();
+  toast(r ? 'Contatto aggiornato.' : `Aggiunto: ${denominazione(riga)}.`);
+});
+$('ind-del').addEventListener('click', async () => {
+  const r = indInModifica;
+  if (!r || !window.confirm(`Elimino ${denominazione(r)} da ${TIPI_IND[indTipo].titolo}? Non si può annullare.`)) return;
+  const { error } = await sb.from(TAB_IND).delete().eq('id', r.id);
+  if (error) { toast('Non eliminato: ' + error.message, true); return; }
+  chiudiInd();
+  await caricaInd();
+  toast('Contatto eliminato.');
 });
 
 /* ---------- AGGIUNGI / COLLEGA ---------- */
