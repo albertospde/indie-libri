@@ -152,6 +152,18 @@
   .col-presa{ position:absolute; top:0; right:0; width:10px; height:100%; cursor:col-resize; touch-action:none; }
   .col-presa::after{ content:''; position:absolute; top:25%; bottom:25%; right:3px; width:2px; border-radius:2px; background:var(--border); }
   .col-presa:hover::after{ background:var(--cyan); }
+  .th-in{ display:flex; align-items:center; gap:5px; min-width:0; padding-right:8px; }
+  .th-et{ overflow:hidden; text-overflow:ellipsis; }
+  .az{ flex-shrink:0; border:1px solid var(--border); background:var(--card); color:var(--text-dim); border-radius:5px; padding:0 3px; font-size:9.5px; font-weight:800; line-height:15px; }
+  .az:hover,.az.on{ border-color:var(--cyan); color:var(--cyan); }
+  /* ---------- FOGLI DELLA DISTRIBUZIONE ---------- */
+  .fogli{ display:flex; gap:4px; overflow-x:auto; margin:0 0 -1px; padding:0 10px; position:relative; }
+  .foglio{ flex-shrink:0; display:flex; align-items:center; gap:7px; border:1px solid var(--border); border-bottom:0; background:var(--card-2); color:var(--text-dim); border-radius:10px 10px 0 0; padding:8px 13px; font-size:14px; font-weight:600; }
+  .foglio:hover{ color:var(--cyan); }
+  .foglio.attivo{ background:linear-gradient(140deg,var(--a1),var(--a2)); border-color:var(--a2); color:#fff; font-weight:700; }
+  .foglio .conta{ font-size:11.5px; font-variant-numeric:tabular-nums; opacity:.8; }
+  .manca{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; background:var(--warn-bg); color:var(--warn-text); border-radius:10px; padding:10px 12px; margin-top:10px; font-size:14px; }
+  .manca button{ padding:8px 12px; font-size:14px; }
   .tab-aiuto{ font-size:12.5px; color:var(--text-dim); margin:0 0 8px; }
   td.agente{ font-size:12.5px; }
   td.agente .senza{ color:var(--text-dim); }
@@ -317,7 +329,9 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="fogli" id="fogli" role="tablist" aria-label="Fogli della distribuzione"></div>
+
+      <div class="card" id="card-interne">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
           <div>
             <h2 class="tit">Copie per fiere e saloni</h2>
@@ -332,10 +346,10 @@
           <div class="f-note"><label for="i-note">Note</label><input id="i-note" type="text" autocomplete="off" /></div>
           <button class="btn-primary" type="submit" style="padding:10px 14px;font-size:14.5px;">＋ Aggiungi</button>
         </form>
-        <div class="tab-wrap"><table id="interne-tab" class="uguale"><tbody id="interne-body"></tbody><tfoot id="interne-foot"></tfoot></table></div>
+        <div class="tab-wrap"><table id="interne-tab" class="uguale"><thead><tr id="interne-head"></tr></thead><tbody id="interne-body"></tbody><tfoot id="interne-foot"></tfoot></table></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="card-filtri">
         <div class="toolbar">
           <span class="sync-line" id="sync-line">Caricamento…</span>
           <span class="spacer"></span>
@@ -362,7 +376,7 @@
         <div class="kpis" id="kpis"></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="card-tab">
         <p class="tab-aiuto">Clicca una riga per leggerla per intero. Trascina il bordo di un'intestazione per allargare la colonna.</p>
         <div class="tab-wrap">
           <table id="tab" class="uguale">
@@ -501,6 +515,9 @@ const TAB_AGENTI = 'indie_agenti_rubrica';
 const COPIE_DEFAULT = 50;
 const COPIE_OPZIONI = [0, 25, 50, 75, 100, 150, 200, 300, 400, 500];
 const TAB_IND = 'indie_indirizzari';
+const TAB_DIST_C = 'indie_rivista_distribuzione_contatti';
+const COPIE_DEFAULT_CONTATTI = 1;
+const COPIE_OPZIONI_CONTATTI = [0, 1, 2, 3, 5, 10, 25, 50, 100];
 const TIPI_IND = {
   uffici_stampa:  { titolo:'Uffici Stampa',     ordine:'ragione_sociale' },
   giornalisti:    { titolo:'Giornalisti',       ordine:'cognome', extra:{ key:'testata', label:'Testata', w:170 } },
@@ -578,6 +595,9 @@ function mostraSezione(id){
   $('section-indirizzario').style.display = TIPI_IND[id] ? 'block' : 'none';
   document.querySelectorAll('.side-item').forEach(b => b.classList.toggle('active', b.dataset.sezione === id));
   if (id === 'rivista' && !elencoCaricato) { elencoCaricato = true; caricaElenco(); }
+  else if (id === 'rivista') { // i nominativi possono essere cambiati negli indirizzari
+    caricaContatti().then(() => { riempiProvince(); applicaFiltri(); }).catch(e => toast('Errore di caricamento: ' + (e.message || e), true));
+  }
   if (id === 'agenti') caricaAgenti();
   if (TIPI_IND[id]) apriIndirizzario(id);
 }
@@ -591,6 +611,17 @@ $('home-altra').addEventListener('click', nuovaFrase);
 const LARG_KEY = 'indie-colonne';
 function larghezzeSalvate(){ try { return JSON.parse(localStorage.getItem(LARG_KEY)) || {}; } catch (_e) { return {}; } }
 const PRESA = '<span class="col-presa" title="Trascina per allargare"></span>';
+function testataOrd(attr, key, label, su, dir){
+  return `<th ${attr}="${key}" aria-sort="${su ? (dir > 0 ? 'ascending' : 'descending') : 'none'}" title="Ordina A/Z o Z/A" style="cursor:pointer;user-select:none;"><div class="th-in"><span class="th-et">${label}</span><button class="az${su ? ' on' : ''}" type="button" aria-label="Ordina per ${label}">${su && dir < 0 ? 'Z/A' : 'A/Z'}</button></div>${PRESA}</th>`;
+}
+// I campi vuoti restano in fondo, in entrambi i versi
+function confronta(x, y, dir){
+  const vuoto = v => v == null || v === '';
+  if (vuoto(x) !== vuoto(y)) return vuoto(x) ? 1 : -1;
+  if (vuoto(x)) return 0;
+  if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
+  return String(x).localeCompare(String(y), 'it', { numeric:true, sensitivity:'base' }) * dir;
+}
 const larghezzaTabella = larg => `max(100%, ${larg.reduce((t, w) => t + w, 0)}px)`;
 
 // colonne: [{ k, w }]. Le larghezze scelte a mano restano su questo browser
@@ -691,7 +722,8 @@ const COLS = [
   { key:'_conf',           label:'Conferma' },
   { key:null,              label:'' },
 ];
-const st = { numeri:[], numeroId:null, interne:[], rows:[], filtered:[], sortKey:'provincia', sortDir:1, busy:new Set(), altro:new Set(), collegaId:null };
+const st = { numeri:[], numeroId:null, interne:[], rows:[], filtered:[], sortKey:'provincia', sortDir:1, busy:new Set(), altro:new Set(), collegaId:null, contatti:[], foglio:'generale', ordInterne:{ key:null, dir:1 } };
+const FOGLI = [['generale', 'Generale'], ['librerie', 'Librerie'], ...Object.entries(TIPI_IND).map(([k, v]) => [k, v.titolo]), ['fiere', 'Fiere e interni']];
 
 function statoDi(r){
   if (!r.in_anagrafica) return { c:'N', lab:'Non in anagrafica' };
@@ -700,13 +732,43 @@ function statoDi(r){
   return { c:'S', lab:'Sospesa' };
 }
 function prepara(r){
+  r._conf = r.copie_confermate ?? -1;
+  if (r._tipo) return r;
   r._st = statoDi(r);
   r._stato = r._st.lab;
-  r._conf = r.copie_confermate ?? -1;
+  r._nome = r.ragione_sociale;
+  r._foglio = 'Librerie';
+  r._regione = r.regione ? nomeRegione(r.regione.trim()) : '';
   r._agenti = (r.agenti_ruolo_agente || []).filter(Boolean);
   r._agente = r._agenti.join(', ');
   r._search = norm([r.codice_cliente, r.ragione_sociale, r.nome_file, r.indirizzo, r.citta, r.provincia, r.cap, r.partita_iva, r.note, r._agente].join(' '));
   return r;
+}
+// Id negativo: una riga di contatto non si confonde mai con una libreria nella stessa tabella
+function preparaContatto(d){
+  const c = d.contatto;
+  const r = { ...c, ...d, id:-c.id, contatto_id:c.id, _tipo:c.tipo, _nome:denominazione(c), _foglio:TIPI_IND[c.tipo].titolo, _regione:c.regione ? nomeRegione(c.regione) : '', _agenti:[], _agente:'', _st:{ c:'A', lab:'' }, _stato:'' };
+  delete r.contatto;
+  r._search = norm([r.nome, r.cognome, r.ragione_sociale, r.testata, r.canali_social, r.indirizzo, r.citta, r.cap, r._regione].join(' '));
+  return prepara(r);
+}
+async function caricaContatti(){
+  const tutte = [];
+  for (let da = 0; st.numeroId != null; da += 1000) {
+    const { data, error } = await sb.from(TAB_DIST_C).select('*, contatto:indie_indirizzari(*)').eq('numero_id', st.numeroId).order('contatto_id').range(da, da + 999);
+    if (error) throw error;
+    tutte.push(...data);
+    if (data.length < 1000) break;
+  }
+  st.contatti = tutte.map(preparaContatto);
+}
+function righeFiere(){
+  return st.interne.map(x => ({ id:'f' + x.id, _fiera:true, _nome:x.destinazione, _foglio:'Fiere e interni', _regione:'', _agenti:[], _agente:'', _st:{ c:'A', lab:'' }, _stato:'', copie:x.copie, copie_confermate:x.copie, _conf:x.copie, _search:norm([x.destinazione, x.note].join(' ')) }));
+}
+function righeFoglio(){
+  if (st.foglio === 'generale') return [...st.rows, ...st.contatti, ...righeFiere()];
+  if (st.foglio === 'librerie') return st.rows;
+  return st.contatti.filter(r => r._tipo === st.foglio);
 }
 function segnaDoppioni(){
   const conta = new Map();
@@ -757,6 +819,7 @@ async function caricaElenco(scegli){
       if (data.length < 1000) break;
     }
     st.rows = all.map(prepara);
+    await caricaContatti();
     segnaDoppioni();
     riempiProvince();
     riempiAgenti();
@@ -772,7 +835,8 @@ async function caricaElenco(scegli){
 
 function riempiProvince(){
   const sel = $('f-prov'), cur = sel.value;
-  const prov = [...new Set(st.rows.map(r => r.provincia).filter(Boolean))].sort();
+  const lib = st.foglio === 'librerie';
+  const prov = [...new Set(righeFoglio().map(r => lib ? r.provincia : r._regione).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'it'));
   sel.innerHTML = '<option value="">Tutte</option>' + prov.map(p => `<option>${esc(p)}</option>`).join('');
   sel.value = prov.includes(cur) ? cur : '';
 }
@@ -788,9 +852,9 @@ function riempiAgenti(){
 function applicaFiltri(){
   const parole = norm($('f-q').value).split(/\s+/).filter(Boolean);
   const prov = $('f-prov').value, stato = $('f-stato').value, conf = $('f-conf').value, agente = $('f-agente').value;
-  st.filtered = st.rows.filter(r => {
+  st.filtered = righeFoglio().filter(r => {
     if (parole.length && !parole.every(p => r._search.includes(p))) return false;
-    if (prov && r.provincia !== prov) return false;
+    if (prov && (st.foglio === 'librerie' ? r.provincia : r._regione) !== prov) return false;
     if (agente === SENZA_AGENTE ? r._agenti.length : agente && !r._agenti.includes(agente)) return false;
     if (stato && r._st.c !== stato) return false;
     if (conf === 'no' && r.copie_confermate != null) return false;
@@ -807,19 +871,17 @@ function applicaFiltri(){
 function ordina(){
   const k = st.sortKey, d = st.sortDir;
   st.filtered.sort((a, b) => {
-    const x = a[k], y = b[k];
-    if (typeof x === 'number' && typeof y === 'number') { if (x !== y) return (x - y) * d; }
-    else { const c = String(x ?? '').localeCompare(String(y ?? ''), 'it', { numeric:true }); if (c) return c * d; }
-    return String(a.citta ?? '').localeCompare(String(b.citta ?? ''), 'it') || String(a.ragione_sociale).localeCompare(String(b.ragione_sociale), 'it');
+    return confronta(a[k], b[k], d) || String(a.citta ?? '').localeCompare(String(b.citta ?? ''), 'it') || String(a._nome).localeCompare(String(b._nome), 'it');
   });
 }
 
 function selectCopie(r){
   if (st.altro.has(r.id)) {
-    return `<input type="number" min="0" step="1" value="${r.copie}" data-azione="copie-num" data-id="${r.id}" aria-label="Copie per ${esc(r.ragione_sociale)}" />`;
+    return `<input type="number" min="0" step="1" value="${r.copie}" data-azione="copie-num" data-id="${r.id}" aria-label="Copie per ${esc(r._nome)}" />`;
   }
-  const opz = COPIE_OPZIONI.includes(r.copie) ? COPIE_OPZIONI : [...COPIE_OPZIONI, r.copie].sort((a, b) => a - b);
-  return `<select data-azione="copie" data-id="${r.id}" aria-label="Copie per ${esc(r.ragione_sociale)}">`
+  const base = r._tipo ? COPIE_OPZIONI_CONTATTI : COPIE_OPZIONI;
+  const opz = base.includes(r.copie) ? base : [...base, r.copie].sort((a, b) => a - b);
+  return `<select data-azione="copie" data-id="${r.id}" aria-label="Copie per ${esc(r._nome)}">`
     + opz.map(n => `<option value="${n}"${n === r.copie ? ' selected' : ''}>${n}</option>`).join('')
     + `<option value="altro">Altro…</option></select>`;
 }
@@ -838,7 +900,7 @@ function cellaConferma(r){
     <button class="icon-btn" type="button" data-azione="annulla" data-id="${r.id}"${busy} title="Annulla la conferma" aria-label="Annulla la conferma">↩</button>`;
 }
 
-function rigaHtml(r){
+function rigaLibreria(r){
   const s = r._st;
   const chips = [];
   if (r._dup) chips.push('<span class="chip dup" title="Compare più di una volta in elenco">doppione</span>');
@@ -859,20 +921,91 @@ function rigaHtml(r){
   </tr>`;
 }
 
-const LARG_RIVISTA = [75, 260, 200, 62, 120, 52, 160, 130, 110, 170, 44];
-impostaColonne($('tab'), 'rivista', COLS.map((c, i) => ({ k:c.key || 'azioni', w:LARG_RIVISTA[i] })));
+const LARG_RIVISTA = [95, 260, 200, 85, 110, 85, 150, 125, 105, 170, 44];
+const vuotoC = '<span class="vuoto-c">—</span>';
+const cellaTesto = k => r => r[k] || r[k] === 0 ? esc(r[k]) : vuotoC;
+const COLONNE_COPIE = [
+  { key:'copie', label:'Copie', w:105, cls:'copie', cell:r => r._fiera ? fmt(r.copie) : selectCopie(r) },
+  { key:'_conf', label:'Conferma', w:170, cls:'conf', cell:r => r._fiera ? `<span class="conf-ok">✓ ${fmt(r.copie)} copie</span>` : cellaConferma(r) },
+  { key:null, label:'', w:44, cell:r => r._fiera ? '' : `<button class="icon-btn" type="button" data-azione="togli" data-id="${r.id}" title="Togli dall'elenco" aria-label="Togli ${esc(r._nome)} dall'elenco">🗑</button>` },
+];
+function colonneVista(){
+  if (st.foglio === 'librerie') return COLS.map((c, i) => ({ ...c, w:LARG_RIVISTA[i] }));
+  const zona = [
+    { key:'indirizzo', label:'Indirizzo', w:200, cell:cellaTesto('indirizzo') },
+    { key:'cap', label:'CAP', w:85, cell:cellaTesto('cap') },
+    { key:'citta', label:'Città', w:120, cell:cellaTesto('citta') },
+    { key:'_regione', label:'Regione', w:125, cell:cellaTesto('_regione') },
+  ];
+  if (st.foglio === 'generale') return [
+    { key:'_foglio', label:'Foglio', w:135, cell:cellaTesto('_foglio') },
+    { key:'_nome', label:'Destinatario', w:260, cls:'nome', cell:cellaTesto('_nome') },
+    ...zona,
+    { key:'_agente', label:'Agente', w:150, cls:'agente', cell:cellaTesto('_agente') },
+    { key:'_stato', label:'Stato', w:125, cell:r => r._tipo || r._fiera ? vuotoC : `<span class="badge ${r._st.c}">${esc(r._st.lab)}</span>` },
+    ...COLONNE_COPIE,
+  ];
+  const extra = TIPI_IND[st.foglio].extra;
+  return [
+    { key:'nome', label:'Nome', w:115, cell:cellaTesto('nome') },
+    { key:'cognome', label:'Cognome', w:125, cell:cellaTesto('cognome') },
+    { key:'ragione_sociale', label:'Ragione sociale', w:210, cls:'nome', cell:cellaTesto('ragione_sociale') },
+    ...(extra ? [{ key:extra.key, label:extra.label, w:extra.w, cell:cellaTesto(extra.key) }] : []),
+    ...zona,
+    ...COLONNE_COPIE,
+  ];
+}
+function rigaHtml(r){
+  if (st.foglio === 'librerie') return rigaLibreria(r);
+  const spenta = r._st.c === 'S' || r._st.c === 'C';
+  return `<tr data-id="${r.id}" class="${spenta ? 'spenta' : ''}">${colonneVista().map(c => `<td class="${c.cls || ''}">${c.cell(r)}</td>`).join('')}</tr>`;
+}
 impostaColonne($('interne-tab'), 'interne', [{ k:'dest', w:320 }, { k:'data', w:110 }, { k:'copie', w:90 }, { k:'note', w:320 }, { k:'azioni', w:44 }]);
 
 function disegnaTabella(){
-  $('tab-head').innerHTML = COLS.map(c => {
-    if (!c.key) return '<th></th>';
-    const arrow = st.sortKey === c.key ? `<span class="arrow">${st.sortDir > 0 ? '▲' : '▼'}</span>` : '';
-    return `<th data-sort="${c.key}">${c.label}${arrow}${PRESA}</th>`;
-  }).join('');
+  const colonne = colonneVista();
+  $('tab-head').innerHTML = colonne.map(c => c.key ? testataOrd('data-sort', c.key, c.label, st.sortKey === c.key, st.sortDir) : '<th></th>').join('');
+  const q = $('f-q').value.trim(), aggiungibile = st.foglio !== 'generale';
+  const totali = righeFoglio().length;
+  const vuoto = !totali ? (aggiungibile ? 'Ancora nessuno in questo foglio: comincia da Aggiungi.' : 'Elenco vuoto.')
+    : 'Nessun risultato con questi filtri.' + (aggiungibile ? '' : ' Per aggiungere un nominativo, vai nel suo foglio.');
+  const bottone = q && aggiungibile ? ` <button class="btn-secondary" type="button" id="vuoto-aggiungi" style="margin-left:8px;">＋ Cerca «${esc(q)}» e aggiungi</button>` : '';
   $('tab-body').innerHTML = st.filtered.length
     ? st.filtered.map(rigaHtml).join('')
-    : `<tr><td colspan="${COLS.length}" class="vuoto">${st.rows.length ? 'Nessuna libreria con questi filtri.' : 'Elenco vuoto.'}</td></tr>`;
+    : `<tr><td colspan="${colonne.length}" class="vuoto">${vuoto}${bottone}</td></tr>`;
 }
+
+function impostaFoglio(f){
+  st.foglio = f;
+  st.altro.clear();
+  const lib = f === 'librerie', fiere = f === 'fiere', gen = f === 'generale';
+  document.querySelectorAll('#fogli .foglio').forEach(b => { const on = b.dataset.foglio === f; b.classList.toggle('attivo', on); b.setAttribute('aria-selected', on); });
+  $('card-interne').style.display = fiere ? '' : 'none';
+  $('card-filtri').style.display = fiere ? 'none' : '';
+  $('card-tab').style.display = fiere ? 'none' : '';
+  ['estrai-btn', 'carica-btn', 'email-btn'].forEach(id => { $(id).style.display = lib ? '' : 'none'; });
+  $('add-btn').style.display = gen || fiere ? 'none' : '';
+  $('add-btn').textContent = lib ? '＋ Aggiungi libreria' : '＋ Aggiungi nominativo';
+  $('f-agente').parentElement.style.display = lib ? '' : 'none';
+  $('f-stato').parentElement.style.display = lib ? '' : 'none';
+  $('f-prov').previousElementSibling.textContent = lib ? 'Provincia' : 'Regione';
+  $('f-q').placeholder = lib ? 'Codice, nome, città, indirizzo…' : 'Nome, cognome, città…';
+  $('f-conf').innerHTML = '<option value="">Tutte</option><option value="no">Da confermare</option><option value="si">Confermate</option>' + (lib ? '<option value="ver">Abbinamento da verificare</option><option value="dup">Doppioni</option>' : '');
+  ['f-q', 'f-prov', 'f-agente', 'f-stato'].forEach(id => { $(id).value = ''; });
+  st.sortKey = lib ? 'provincia' : gen ? '_foglio' : fiere ? 'copie' : TIPI_IND[f].ordine;
+  st.sortDir = 1;
+  if (fiere) { disegnaTotali(); return; }
+  impostaColonne($('tab'), 'riv-' + f, colonneVista().map(c => ({ k:c.key || 'azioni', w:c.w })));
+  riempiProvince();
+  if (lib) riempiAgenti();
+  applicaFiltri();
+}
+$('fogli').innerHTML = FOGLI.map(([k, t]) => `<button class="foglio" type="button" role="tab" data-foglio="${k}">${esc(t)}<span class="conta" data-conta="${k}">0</span></button>`).join('');
+$('fogli').addEventListener('click', e => {
+  const b = e.target.closest('.foglio');
+  if (b && b.dataset.foglio !== st.foglio) impostaFoglio(b.dataset.foglio);
+});
+$('tab-body').addEventListener('click', e => { if (e.target.closest('#vuoto-aggiungi')) apriAggiungi($('f-q').value.trim()); });
 
 function ridisegnaRiga(r){
   const tr = $('tab-body').querySelector(`tr[data-id="${r.id}"]`);
@@ -886,18 +1019,31 @@ function disegnaTotali(){
   const R = st.rows;
   const inLibreria = R.reduce((t, r) => t + (r.copie_confermate || 0), 0);
   const interne = st.interne.reduce((t, i) => t + i.copie, 0);
-  const distribuite = inLibreria + interne;
-  const daElenco = R.reduce((t, r) => t + r.copie, 0);
+  const C = st.contatti;
+  const aContatti = C.reduce((t, r) => t + (r.copie_confermate || 0), 0);
+  const distribuite = inLibreria + aContatti + interne;
+  const daElenco = R.reduce((t, r) => t + r.copie, 0) + C.reduce((t, r) => t + r.copie, 0);
   const previste = numeroAperto()?.copie_previste ?? daElenco;
   const confermate = R.filter(r => r.copie_confermate != null).length;
+  const confermatiTutti = confermate + C.filter(r => r.copie_confermate != null).length;
   const pct = previste ? Math.min(100, Math.round(distribuite / previste * 100)) : 0;
   $('tot-distribuite').textContent = fmt(distribuite);
-  $('tot-sub').textContent = `su ${fmt(previste)} previste · ${fmt(inLibreria)} in libreria + ${fmt(interne)} per fiere e saloni`;
+  $('tot-sub').textContent = `su ${fmt(previste)} previste · ${fmt(inLibreria)} in libreria + ${fmt(aContatti)} ad altri destinatari + ${fmt(interne)} per fiere e interni`;
   $('tot-fill').style.width = pct + '%';
-  $('tot-cap').textContent = `${fmt(confermate)} ${confermate === 1 ? "libreria confermata" : "librerie confermate"} su ${fmt(R.length)} · ${pct}% delle copie · ${fmt(daElenco)} assegnate in elenco`;
+  $('tot-cap').textContent = `${fmt(confermatiTutti)} ${confermatiTutti === 1 ? 'destinatario confermato' : 'destinatari confermati'} su ${fmt(R.length + C.length)} · ${pct}% delle copie · ${fmt(daElenco)} assegnate in elenco`;
+  FOGLI.forEach(([k]) => {
+    const n = k === 'generale' ? R.length + C.length + st.interne.length : k === 'librerie' ? R.length : k === 'fiere' ? st.interne.length : C.filter(r => r._tipo === k).length;
+    document.querySelector(`[data-conta="${k}"]`).textContent = fmt(n);
+  });
 
   const n = c => R.filter(r => r._st.c === c).length;
-  const kpi = [
+  const V = righeFoglio(), vConf = V.filter(r => r.copie_confermate != null).length;
+  const kpi = st.foglio !== 'librerie' ? [
+    { lab:'Destinatari', val:V.length, f:{} },
+    { lab:'Da confermare', val:V.length - vConf, f:{ conf:'no' } },
+    { lab:'Confermati', val:vConf, f:{ conf:'si' } },
+    { lab:'Copie assegnate', val:V.reduce((t, r) => t + r.copie, 0), f:{} },
+  ] : [
     { lab:'Librerie', val:R.length, f:{} },
     { lab:'Attive', val:n('A'), f:{ stato:'A' } },
     { lab:'Sospese', val:n('S'), f:{ stato:'S' }, cls:'amb' },
@@ -920,8 +1066,10 @@ function disegnaTotali(){
   }));
 }
 
-const rigaPerId = id => st.rows.find(r => r.id === Number(id));
-const aggiornaDist = (r, patch) => sb.from(TAB_DIST).update(patch).eq('numero_id', st.numeroId).eq('libreria_id', r.id);
+const rigaPerId = id => st.rows.find(r => r.id === Number(id)) || st.contatti.find(r => r.id === Number(id));
+const aggiornaDist = (r, patch) => r._tipo
+  ? sb.from(TAB_DIST_C).update(patch).eq('numero_id', st.numeroId).eq('contatto_id', r.contatto_id)
+  : sb.from(TAB_DIST).update(patch).eq('numero_id', st.numeroId).eq('libreria_id', r.id);
 
 /* ---------- COPIE (tendina) ---------- */
 async function salvaCopie(r, valore){
@@ -958,7 +1106,7 @@ async function conferma(r){
   disegnaTotali();
 }
 async function annullaConferma(r){
-  if (!window.confirm(`Annullo la conferma di ${r.ragione_sociale}? Le copie escono dal totale.`)) return;
+  if (!window.confirm(`Annullo la conferma di ${r._nome}? Le copie escono dal totale.`)) return;
   const patch = { copie_confermate:null, confermata_il:null, confermata_da:null };
   const { error } = await aggiornaDist(r, patch);
   if (error) { toast('Non riuscito: ' + error.message, true); return; }
@@ -971,10 +1119,11 @@ async function confermaVisibili(){
   // Le sospese e le cessate restano fuori: vanno confermate una per una
   const daFare = st.filtered.filter(r => r.copie_confermate !== r.copie && (r._st.c === 'A' || r._st.c === 'N'));
   const saltate = st.filtered.filter(r => r.copie_confermate !== r.copie && (r._st.c === 'S' || r._st.c === 'C')).length;
-  if (!daFare.length) { toast('Nessuna libreria da confermare tra quelle visibili.'); return; }
+  const parola = st.foglio === 'librerie' ? 'librerie' : 'destinatari';
+  if (!daFare.length) { toast(`Nessun elemento da confermare tra quelli visibili.`); return; }
   const tot = daFare.reduce((t, r) => t + r.copie, 0);
   const avviso = saltate ? `\n\n${saltate} sospese o cessate restano fuori: vanno confermate una per una.` : '';
-  if (!window.confirm(`Confermo ${fmt(daFare.length)} librerie per ${fmt(tot)} copie?${avviso}`)) return;
+  if (!window.confirm(`Confermo ${fmt(daFare.length)} ${parola} per ${fmt(tot)} copie?${avviso}`)) return;
   const btn = $('conferma-tutte-btn');
   btn.disabled = true;
   let ok = 0, ko = 0;
@@ -992,21 +1141,24 @@ async function confermaVisibili(){
   btn.disabled = false;
   btn.textContent = '✓ Conferma le visibili';
   applicaFiltri();
-  toast(ko ? `Confermate ${ok}, ${ko} non riuscite: riprova.` : `Confermate ${fmt(ok)} librerie.`, !!ko);
+  toast(ko ? `Confermate ${ok}, ${ko} non riuscite: riprova.` : `Confermati ${fmt(ok)} ${parola}.`, !!ko);
 }
 
 /* ---------- TOGLI ---------- */
 async function togli(r){
   const extra = r.copie_confermate != null ? `\nAveva ${r.copie_confermate} copie confermate: escono dal totale.` : '';
-  if (!window.confirm(`Tolgo ${r.ragione_sociale} dall'elenco di questo numero?${extra}`)) return;
-  const { error } = await sb.from(TAB_DIST).delete().eq('numero_id', st.numeroId).eq('libreria_id', r.id);
+  if (!window.confirm(`Tolgo ${r._nome} dall'elenco di questo numero?${extra}`)) return;
+  const { error } = r._tipo
+    ? await sb.from(TAB_DIST_C).delete().eq('numero_id', st.numeroId).eq('contatto_id', r.contatto_id)
+    : await sb.from(TAB_DIST).delete().eq('numero_id', st.numeroId).eq('libreria_id', r.id);
   if (error) { toast('Non riuscito: ' + error.message, true); return; }
-  st.rows = st.rows.filter(x => x.id !== r.id);
+  if (r._tipo) st.contatti = st.contatti.filter(x => x.id !== r.id);
+  else st.rows = st.rows.filter(x => x.id !== r.id);
   segnaDoppioni();
   riempiProvince();
   riempiAgenti();
   applicaFiltri();
-  toast('Libreria tolta dall\'elenco.');
+  toast(r._tipo ? 'Tolto dall\'elenco.' : 'Libreria tolta dall\'elenco.');
 }
 
 /* ---------- AZIONI SULLE RIGHE ---------- */
@@ -1114,7 +1266,7 @@ $('numero-del').addEventListener('click', async () => {
   if (!n) return;
   if (st.numeri.length === 1) { toast('È l\'unico numero: non si può eliminare.', true); return; }
   // Un numero con dati registrati non si elimina: si perderebbero le conferme
-  if (st.rows.some(r => r.copie_confermate != null) || st.interne.length) { toast('Questo numero ha conferme o copie per fiere: prima vanno annullate.', true); return; }
+  if ([...st.rows, ...st.contatti].some(r => r.copie_confermate != null) || st.interne.length) { toast('Questo numero ha conferme o copie per fiere: prima vanno annullate.', true); return; }
   if (!window.confirm(`Elimino ${n.titolo}? L'elenco delle librerie degli altri numeri non cambia.`)) return;
   const { error } = await sb.from(TAB_NUM).delete().eq('id', n.id);
   if (error) { toast('Non eliminato: ' + error.message, true); return; }
@@ -1125,9 +1277,21 @@ $('numero-del').addEventListener('click', async () => {
 });
 
 /* ---------- COPIE PER FIERE E SALONI ---------- */
+const COL_INTERNE = [{ key:'destinazione', label:'Fiera o salone' }, { key:'data_evento', label:'Data' }, { key:'copie', label:'Copie' }, { key:'note', label:'Note' }];
+$('interne-head').addEventListener('click', e => {
+  const th = e.target.closest('th[data-ordina]');
+  if (!th) return;
+  const ord = st.ordInterne;
+  if (ord.key === th.dataset.ordina) ord.dir *= -1;
+  else { ord.key = th.dataset.ordina; ord.dir = 1; }
+  disegnaInterne();
+});
 function disegnaInterne(){
   const tot = st.interne.reduce((t, i) => t + i.copie, 0);
-  $('interne-body').innerHTML = st.interne.map(i => `<tr>
+  const ord = st.ordInterne;
+  $('interne-head').innerHTML = COL_INTERNE.map(c => testataOrd('data-ordina', c.key, c.label, ord.key === c.key, ord.dir)).join('') + '<th></th>';
+  const righe = ord.key ? [...st.interne].sort((a, b) => confronta(a[ord.key], b[ord.key], ord.dir)) : st.interne;
+  $('interne-body').innerHTML = righe.map(i => `<tr>
     <td class="nome">${esc(i.destinazione)}</td><td>${esc(fmtData(i.data_evento))}</td><td class="num">${fmt(i.copie)}</td><td>${esc(i.note || '')}</td>
     <td style="width:1%;"><button class="icon-btn" type="button" data-interna="${i.id}" title="Togli" aria-label="Togli ${esc(i.destinazione)}">🗑</button></td>
   </tr>`).join('');
@@ -1441,8 +1605,23 @@ function scaricaFile(blob, nome){
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
+function esportaFoglio(btn){
+  const nomeF = FOGLI.find(([k]) => k === st.foglio)[1], numero = numeroAperto()?.titolo;
+  const dataIt = v => v ? new Date(v).toLocaleDateString('it-IT') : '';
+  const base = k => r => r[k];
+  const luogo = [{ label:'Indirizzo', w:220, val:base('indirizzo') }, { label:'CAP', w:60, val:base('cap') }, { label:'Città', w:130, val:base('citta') }, { label:'Regione', w:130, val:base('_regione') }];
+  const copie = [{ label:'Copie', w:60, val:base('copie') }, { label:'Copie confermate', w:85, val:base('copie_confermate') }, { label:'Confermata il', w:85, val:r => r._fiera ? '' : dataIt(r.confermata_il) }, { label:'Confermata da', w:180, val:r => r.confermata_da }];
+  const extra = TIPI_IND[st.foglio]?.extra;
+  const colonne = st.foglio === 'generale'
+    ? [{ label:'Foglio', w:120, val:base('_foglio') }, { label:'Destinatario', w:260, val:base('_nome') }, ...luogo, { label:'Agente', w:190, val:base('_agente') }, { label:'Stato', w:110, val:r => r._st.lab }, ...copie]
+    : [{ label:'Nome', w:110, val:base('nome') }, { label:'Cognome', w:130, val:base('cognome') }, { label:'Ragione sociale', w:220, val:base('ragione_sociale') }, ...(extra ? [{ label:extra.label, w:extra.w, val:base(extra.key) }] : []), ...luogo, ...copie];
+  const filtri = descriviFiltri();
+  esportaElenco(btn, { titolo:`Distribuzione Rivista - ${numero ? numero + ' - ' : ''}${nomeF}`, foglio:nomeF, colonne, righe:st.filtered, filtri, somma:['Copie', 'Copie confermate'], parole:['destinatario', 'destinatari'] });
+}
+
 $('export-btn').addEventListener('click', async () => {
   const btn = $('export-btn');
+  if (st.foglio !== 'librerie') { esportaFoglio(btn); return; }
   btn.disabled = true;
   try {
     await caricaExcelJS();
@@ -1476,7 +1655,7 @@ $('interne-export').addEventListener('click', async () => {
 });
 
 // Esporta un indirizzario con le righe che si vedono a video. colonne: [{ label, w (pixel a video), val }]
-async function esportaElenco(btn, { titolo, colonne, righe, filtri }){
+async function esportaElenco(btn, { titolo, foglio, colonne, righe, filtri, somma = [], parole = ['contatto', 'contatti'] }){
   if (!righe.length) { toast('Nessuna riga da esportare.', true); return; }
   btn.disabled = true;
   try {
@@ -1484,7 +1663,7 @@ async function esportaElenco(btn, { titolo, colonne, righe, filtri }){
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Indie Libri';
     const HEAD = 3, N = colonne.length;
-    const ws = wb.addWorksheet(nomeFoglio(titolo, new Set()), {
+    const ws = wb.addWorksheet(nomeFoglio(foglio || titolo, new Set()), {
       views:[{ state:'frozen', ySplit:HEAD, showGridLines:false }],
       pageSetup:{ orientation:'landscape', paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0, margins:{ left:.4, right:.4, top:.5, bottom:.6, header:.3, footer:.3 } },
       headerFooter:{ oddFooter:`&LIndie Libri - ${titolo}&RPagina &P di &N` },
@@ -1501,7 +1680,7 @@ async function esportaElenco(btn, { titolo, colonne, righe, filtri }){
       ws.getRow(r).height = alt;
     };
     fascia(1, titolo, 20, XL.scuro, 36, true);
-    fascia(2, `${fmt(righe.length)} ${righe.length === 1 ? 'contatto' : 'contatti'}  ·  Esportato il ${new Date().toLocaleDateString('it-IT')}${filtri.length ? '  ·  Filtri: ' + filtri.join(', ') : ''}`, 12, XL.medio, 24, false);
+    fascia(2, `${fmt(righe.length)} ${righe.length === 1 ? parole[0] : parole[1]}  ·  Esportato il ${new Date().toLocaleDateString('it-IT')}${filtri.length ? '  ·  Filtri: ' + filtri.join(', ') : ''}`, 12, XL.medio, 24, false);
     const lato = { style:'thin', color:{ argb:XL.bordo } };
     const bordi = { top:lato, left:lato, bottom:lato, right:lato };
     const head = ws.getRow(HEAD);
@@ -1525,6 +1704,22 @@ async function esportaElenco(btn, { titolo, colonne, righe, filtri }){
       }
     });
     ws.autoFilter = { from:{ row:HEAD, column:1 }, to:{ row:HEAD + righe.length, column:N } };
+    if (somma.length) { // segue i filtri usati dentro Excel
+      const tot = ws.addRow([]);
+      tot.height = 26;
+      colonne.forEach((col, i) => {
+        const c = tot.getCell(i + 1);
+        c.fill = riempi(XL.scuro);
+        c.font = { name:'Calibri', size:13, bold:true, color:{ argb:XL.bianco } };
+        c.alignment = { vertical:'middle' };
+        if (i === 0) c.value = 'TOTALE';
+        if (somma.includes(col.label)) {
+          const L = ws.getColumn(i + 1).letter;
+          c.value = { formula:`SUBTOTAL(109,${L}${HEAD + 1}:${L}${HEAD + righe.length})`, result:righe.reduce((t, r) => t + (Number(col.val(r)) || 0), 0) };
+          c.numFmt = '#,##0';
+        }
+      });
+    }
     const buf = await wb.xlsx.writeBuffer();
     const parte = titolo.replace(/[^A-Za-z0-9]+/g, '');
     scaricaFile(new Blob([buf], { type:XLSX_MIME }), `IndieLibri_${parte}_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -2113,7 +2308,7 @@ const nomeOrdine = a => `${a.cognome || ''} ${a.nome || ''}`;
 const COL_AGENTI = [
   { key:'cognome',   label:'Cognome',   w:130, val:a => a.cognome },
   { key:'nome',      label:'Nome',      w:110, val:a => a.nome },
-  { key:'codice',    label:'Codice',    w:90,  val:a => a.codice },
+  { key:'codice',    label:'Codice',    w:105,  val:a => a.codice },
   { key:'regioni',   label:'Regioni di competenza', w:240, val:a => regioniDi(a).map(nomeRegione).join(', ') },
   { key:'email',     label:'Email',     w:210, val:a => a.email },
   { key:'telefono',  label:'Telefono',  w:130, val:a => a.telefono },
@@ -2154,7 +2349,7 @@ function disegnaAgenti(){
   agentiVisibili = righe.map(r => r.a);
   $('agenti-head').innerHTML = COL_AGENTI.map(c => {
     const su = ordineAgenti.key === c.key;
-    return `<th data-ordina="${c.key}" aria-sort="${su ? (ordineAgenti.dir > 0 ? 'ascending' : 'descending') : 'none'}" title="Ordina A/Z o Z/A" style="cursor:pointer;user-select:none;">${c.label}${su ? `<span class="arrow">${ordineAgenti.dir > 0 ? '▲' : '▼'}</span>` : ''}${PRESA}</th>`;
+    return testataOrd('data-ordina', c.key, c.label, su, ordineAgenti.dir);
   }).join('') + '<th></th>';
   $('agenti-body').innerHTML = righe.length ? righe.map(({ a, i }) => `<tr class="${a.attivo ? '' : 'spenta'}">
     <td class="nome">${a.cognome ? esc(a.cognome) : vuoto}</td>
@@ -2245,7 +2440,7 @@ function colonneInd(){
     { ...base('email'), label:'Email', w:210 },
     { ...base('telefono'), label:'Telefono', w:120 },
     { ...base('indirizzo'), label:'Indirizzo', w:200 },
-    { ...base('cap'), label:'CAP', w:65 },
+    { ...base('cap'), label:'CAP', w:85 },
     { ...base('citta'), label:'Città', w:120 },
     { key:'regione', label:'Regione', w:120, val:r => r.regione ? nomeRegione(r.regione) : null },
   ];
@@ -2265,20 +2460,29 @@ async function apriIndirizzario(tipo){
   await caricaInd();
 }
 
-async function caricaInd(){
-  const tipo = indTipo, tutte = [];
+async function leggiIndirizzario(tipo){
+  const tutte = [];
   for (let da = 0; ; da += 1000) {
     const { data, error } = await sb.from(TAB_IND).select('*').eq('tipo', tipo).order('id').range(da, da + 999);
-    if (tipo !== indTipo) return; // nel frattempo è stata aperta un'altra sezione
-    if (error) {
-      console.error(error);
-      const negato = error.code === '42501';
-      $('ind-info').innerHTML = `<span style="color:var(--danger);font-weight:700;">${negato ? 'La tua utenza non è abilitata a questa sezione.' : 'Errore di caricamento: ' + esc(error.message)}</span>`;
-      return;
-    }
+    if (error) throw error;
     tutte.push(...data);
-    if (data.length < 1000) break;
+    if (data.length < 1000) return tutte;
   }
+}
+
+async function caricaInd(){
+  const tipo = indTipo;
+  let tutte;
+  try {
+    tutte = await leggiIndirizzario(tipo);
+  } catch (error) {
+    if (tipo !== indTipo) return;
+    console.error(error);
+    const negato = error.code === '42501';
+    $('ind-info').innerHTML = `<span style="color:var(--danger);font-weight:700;">${negato ? 'La tua utenza non è abilitata a questa sezione.' : 'Errore di caricamento: ' + esc(error.message)}</span>`;
+    return;
+  }
+  if (tipo !== indTipo) return; // nel frattempo è stata aperta un'altra sezione
   indRighe = tutte;
   const sel = $('ind-reg'), cur = sel.value;
   const usate = REGIONI.filter(r => indRighe.some(x => x.regione === r));
@@ -2309,7 +2513,7 @@ function disegnaInd(){
   $('ind-info').textContent = `${fmt(n)} ${n === 1 ? 'contatto' : 'contatti'}${righe.length !== n ? ` · ${fmt(righe.length)} visibili` : ''}`;
   $('ind-head').innerHTML = colonne.map(c => {
     const su = ordineInd.key === c.key;
-    return `<th data-ordina="${c.key}" aria-sort="${su ? (ordineInd.dir > 0 ? 'ascending' : 'descending') : 'none'}" title="Ordina A/Z o Z/A" style="cursor:pointer;user-select:none;">${c.label}${su ? `<span class="arrow">${ordineInd.dir > 0 ? '▲' : '▼'}</span>` : ''}${PRESA}</th>`;
+    return testataOrd('data-ordina', c.key, c.label, su, ordineInd.dir);
   }).join('') + '<th></th>';
   const vuoto = '<span class="vuoto-c">—</span>';
   const cella = (c, r) => {
@@ -2344,11 +2548,12 @@ $('ind-export').addEventListener('click', e => {
 $('d-reg').innerHTML = '<option value="">—</option>' + REGIONI.map(r => `<option value="${esc(r)}">${esc(nomeRegione(r))}</option>`).join('');
 const CAMPI_IND = { 'd-nome':'nome', 'd-cognome':'cognome', 'd-ragione':'ragione_sociale', 'd-testata':'testata', 'd-canali':'canali_social', 'd-part':'n_partecipanti', 'd-ind':'indirizzo', 'd-cap':'cap', 'd-citta':'citta', 'd-reg':'regione', 'd-tel':'telefono', 'd-email':'email' };
 
-function apriInd(r){
+// proposta: campi già scritti nella ricerca della Distribuzione Rivista
+function apriInd(r, proposta){
   indInModifica = r;
   const cfg = TIPI_IND[indTipo], extra = cfg.extra?.key;
   $('ind-tit').textContent = r ? `Modifica ${denominazione(r)}` : `Aggiungi nuovo · ${cfg.titolo}`;
-  Object.entries(CAMPI_IND).forEach(([id, k]) => { $(id).value = r?.[k] ?? ''; });
+  Object.entries(CAMPI_IND).forEach(([id, k]) => { $(id).value = (r ?? proposta)?.[k] ?? ''; });
   $('d-testata-w').style.display = extra === 'testata' ? '' : 'none';
   $('d-canali-w').style.display = extra === 'canali_social' ? '' : 'none';
   $('d-part-w').style.display = extra === 'n_partecipanti' ? '' : 'none';
@@ -2393,7 +2598,7 @@ $('ind-del').addEventListener('click', async () => {
   const r = indInModifica;
   if (!r || !window.confirm(`Elimino ${denominazione(r)} da ${TIPI_IND[indTipo].titolo}? Non si può annullare.`)) return;
   const { error } = await sb.from(TAB_IND).delete().eq('id', r.id);
-  if (error) { toast('Non eliminato: ' + error.message, true); return; }
+  if (error) { toast(error.code === '23503' ? 'È in distribuzione su un numero della rivista: toglilo prima da lì.' : 'Non eliminato: ' + error.message, true); return; }
   chiudiInd();
   await caricaInd();
   toast('Contatto eliminato.');
@@ -2406,7 +2611,8 @@ function apriModale(titolo, hint, q, collegaId){
   $('add-hint').textContent = hint;
   $('add-q').value = q || '';
   $('add-ris').innerHTML = '';
-  $('add-man-wrap').style.display = collegaId ? 'none' : '';
+  $('add-man-wrap').style.display = collegaId || TIPI_IND[st.foglio] ? 'none' : '';
+  $('add-q').placeholder = TIPI_IND[st.foglio] ? 'Nome, cognome, ragione sociale…' : 'Nome, città, codice, P.IVA…';
   $('add-man-wrap').open = false;
   ['m-nome', 'm-ind', 'm-cap', 'm-citta', 'm-prov'].forEach(id => { $(id).value = ''; });
   $('add-modal').classList.add('open');
@@ -2417,14 +2623,71 @@ function chiudiModale(){ $('add-modal').classList.remove('open'); }
 function apriCollega(r){
   apriModale('Collega all\'anagrafica', `Sul file: ${r.nome_file} - ${r.indirizzo_file || ''} - ${r.citta || ''}`, r.nome_file.split(/\s+/).slice(0, 2).join(' '), r.id);
 }
-$('add-btn').addEventListener('click', () => st.numeroId != null && apriModale('Aggiungi libreria', `Cerca nelle anagrafiche di BookUp. Parte con ${COPIE_DEFAULT} copie, poi le cambi dalla tendina.`, '', null));
+function apriAggiungi(q){
+  if (st.numeroId == null) return;
+  const cfg = TIPI_IND[st.foglio];
+  contattiDaCercare = null;
+  if (cfg) apriModale(`Aggiungi a ${cfg.titolo}`, `Cerca nell'indirizzario ${cfg.titolo}. Parte con ${COPIE_DEFAULT_CONTATTI} copia, poi la cambi dalla tendina.`, q, null);
+  else apriModale('Aggiungi libreria', `Cerca nelle anagrafiche di BookUp. Parte con ${COPIE_DEFAULT} copie, poi le cambi dalla tendina.`, q, null);
+}
+$('add-btn').addEventListener('click', () => apriAggiungi(''));
 $('add-close').addEventListener('click', chiudiModale);
 $('add-modal').addEventListener('click', e => { if (e.target === $('add-modal')) chiudiModale(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') chiudiModale(); });
 
-let cercaT = null, cercaN = 0;
+let cercaT = null, cercaN = 0, contattiDaCercare = null;
+const bloccoManca = (testo, bottone) => `<div class="manca"><span>${testo}</span><button class="btn-primary" type="button" id="manca-ok">${bottone}</button></div>`;
+
+// Porta nella sezione giusta con la scheda già aperta e quello che si stava scrivendo
+function vaiAdAggiungere(q){
+  const tipo = st.foglio, cfg = TIPI_IND[tipo], parti = q.split(/\s+/).filter(Boolean);
+  const proposta = cfg.ordine === 'ragione_sociale' ? { ragione_sociale:q }
+    : parti.length > 1 ? { nome:parti[0], cognome:parti.slice(1).join(' ') } : { cognome:q };
+  chiudiModale();
+  mostraSezione(tipo);
+  apriInd(null, proposta);
+}
+
+async function cercaContatti(){
+  const tipo = st.foglio, cfg = TIPI_IND[tipo], q = $('add-q').value.trim(), box = $('add-ris');
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  const n = ++cercaN;
+  try {
+    contattiDaCercare ??= await leggiIndirizzario(tipo);
+  } catch (e) {
+    if (n === cercaN) box.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(e.message || e)}</p>`;
+    return;
+  }
+  if (n !== cercaN) return;
+  const parole = norm(q).split(/\s+/).filter(Boolean);
+  const trovati = contattiDaCercare.filter(c => {
+    const testo = norm([c.nome, c.cognome, c.ragione_sociale, c.testata, c.canali_social, c.citta, c.email].join(' '));
+    return parole.every(p => testo.includes(p));
+  }).sort((a, b) => denominazione(a).localeCompare(denominazione(b), 'it')).slice(0, 40);
+  const presenti = new Set(st.contatti.map(r => r.contatto_id));
+  const righe = trovati.map(c => {
+    const dettagli = [c.ragione_sociale && (c.nome || c.cognome) ? [c.nome, c.cognome].filter(Boolean).join(' ') : '', c.testata, c.canali_social, c.citta].filter(Boolean).join(' · ');
+    return `<div class="ris-row"><div class="inf"><b>${esc(denominazione(c))}</b><small>${esc(dettagli)}</small></div>${presenti.has(c.id) ? '<span class="sync-line">Già in elenco</span>' : `<button class="btn-secondary" type="button" data-contatto="${c.id}">Aggiungi</button>`}</div>`;
+  }).join('');
+  const manca = trovati.length
+    ? bloccoManca(`Non è tra questi?`, `＋ Aggiungi «${esc(q)}» in ${esc(cfg.titolo)}`)
+    : bloccoManca(`<b>«${esc(q)}» manca in ${esc(cfg.titolo)}.</b> Vuoi aggiungerlo?`, '＋ Sì, aggiungi');
+  box.innerHTML = righe + manca;
+  $('manca-ok').addEventListener('click', () => vaiAdAggiungere(q));
+  box.querySelectorAll('button[data-contatto]').forEach(b => b.addEventListener('click', () => aggiungiContatto(trovati.find(c => c.id === Number(b.dataset.contatto)))));
+}
+async function aggiungiContatto(c){
+  const { error } = await sb.from(TAB_DIST_C).insert({ numero_id:st.numeroId, contatto_id:c.id, copie:COPIE_DEFAULT_CONTATTI });
+  if (error) { toast('Non aggiunto: ' + error.message, true); return; }
+  chiudiModale();
+  await caricaContatti();
+  riempiProvince();
+  applicaFiltri();
+  toast(`${denominazione(c)} aggiunto con ${COPIE_DEFAULT_CONTATTI} copia.`);
+}
 $('add-q').addEventListener('input', () => { clearTimeout(cercaT); cercaT = setTimeout(cercaAnagrafica, 250); });
 async function cercaAnagrafica(){
+  if (TIPI_IND[st.foglio]) { cercaContatti(); return; }
   const q = $('add-q').value.trim();
   const box = $('add-ris');
   if (q.length < 2) { box.innerHTML = ''; return; }
@@ -2432,7 +2695,16 @@ async function cercaAnagrafica(){
   const { data, error } = await sb.rpc('indie_rivista_cerca_anagrafica', { q, p_numero:st.numeroId });
   if (n !== cercaN) return;
   if (error) { box.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(error.message)}</p>`; return; }
-  if (!data.length) { box.innerHTML = '<p class="hint">Nessun cliente trovato.</p>'; return; }
+  if (!data.length) {
+    if (st.collegaId) { box.innerHTML = '<p class="hint">Nessun cliente trovato.</p>'; return; }
+    box.innerHTML = bloccoManca(`<b>«${esc(q)}» manca nelle anagrafiche.</b> Vuoi aggiungerla?`, '＋ Sì, aggiungi');
+    $('manca-ok').addEventListener('click', () => {
+      $('add-man-wrap').open = true;
+      $('m-nome').value = q;
+      $('m-ind').focus();
+    });
+    return;
+  }
   box.innerHTML = data.map(a => {
     const s = statoDi({ in_anagrafica:true, stato:a.stato, motivo:a.motivo });
     const azione = st.collegaId
@@ -2487,6 +2759,7 @@ $('m-save').addEventListener('click', async () => {
   toast(`${nome} aggiunta con ${COPIE_DEFAULT} copie.`);
 });
 
+impostaFoglio('generale');
 checkSession();
 </script>
 </body>
