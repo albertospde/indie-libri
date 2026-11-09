@@ -117,6 +117,9 @@
   .modal .campi .largo{ grid-column:1 / -1; }
   .modal .azioni{ display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
   .modal .azioni .spacer{ flex:1; }
+  .carica-avviso{ background:var(--warn-bg); color:var(--warn-text); border-radius:10px; padding:9px 12px; font-size:13.5px; margin-bottom:8px; }
+  .carica-avviso small{ display:block; margin-top:3px; font-size:12.5px; }
+  .ris-row .da-a{ white-space:nowrap; font-weight:700; font-variant-numeric:tabular-nums; }
   .btn-danger{ color:var(--danger); }
   /* ---------- FILTRI E INDICATORI ---------- */
   .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:12px; }
@@ -290,6 +293,9 @@
           <span class="spacer"></span>
           <button class="btn-secondary" id="conferma-tutte-btn" type="button">✓ Conferma le visibili</button>
           <button class="btn-secondary" id="export-btn" type="button">📥 Esporta</button>
+          <button class="btn-secondary" id="estrai-btn" type="button" title="Scarica il dettaglio delle librerie di ogni agente per il numero aperto">👥 Estrai per agente</button>
+          <button class="btn-secondary" id="carica-btn" type="button" title="Aggiorna le copie del numero aperto da un file Excel">⬆ Carica Excel</button>
+          <input id="carica-file" type="file" accept=".xlsx" style="display:none" />
           <button class="btn-secondary" id="email-btn" type="button" title="Prepara una bozza con le librerie visibili, l'Excel allegato e gli indirizzi degli agenti coinvolti">✉ Email agenti</button>
           <button class="btn-secondary" id="reset-btn" type="button">↺ Reset filtri</button>
           <button class="btn-primary" id="add-btn" type="button" style="padding:9px 14px;font-size:14.5px;">＋ Aggiungi libreria</button>
@@ -360,6 +366,29 @@
       <button class="btn-primary" type="submit" style="padding:10px 18px;font-size:15px;">Salva</button>
     </div>
   </form>
+</div>
+
+<div class="modal-bg" id="estrai-modal">
+  <form class="modal" id="estrai-form" role="dialog" aria-modal="true" aria-labelledby="estrai-tit" style="width:480px;">
+    <h3><span id="estrai-tit">Estrai per agente</span><button class="x-btn" id="estrai-close" type="button" aria-label="Chiudi">×</button></h3>
+    <p class="hint" id="estrai-hint"></p>
+    <label for="estrai-agente">Agente</label>
+    <select id="estrai-agente"></select>
+    <div class="azioni"><button class="btn-primary" id="estrai-ok" type="submit" style="padding:10px 18px;font-size:15px;">📥 Scarica Excel</button></div>
+  </form>
+</div>
+
+<div class="modal-bg" id="carica-modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="carica-tit">
+    <h3><span id="carica-tit">Carica Excel</span><button class="x-btn" id="carica-close" type="button" aria-label="Chiudi">×</button></h3>
+    <p class="hint" id="carica-hint"></p>
+    <div id="carica-avvisi"></div>
+    <div class="ris" id="carica-ris"></div>
+    <div class="azioni">
+      <button class="btn-secondary" id="carica-annulla" type="button">Annulla</button>
+      <button class="btn-primary" id="carica-ok" type="button" style="padding:10px 18px;font-size:15px;">Applica</button>
+    </div>
+  </div>
 </div>
 
 <div class="modal-bg" id="numero-modal">
@@ -1276,6 +1305,308 @@ $('export-btn').addEventListener('click', async () => {
   } finally {
     btn.disabled = false;
   }
+});
+
+/* ---------- ESTRAI PER AGENTE ---------- */
+const SENZA_AGENTE_NOME = 'Senza agente';
+const agentiDelNumero = () => [...new Set(st.rows.flatMap(r => r._agenti))].sort((a, b) => a.localeCompare(b, 'it'));
+const righeDiAgente = nome => st.rows
+  .filter(r => nome === SENZA_AGENTE_NOME ? !r._agenti.length : r._agenti.includes(nome))
+  .sort((a, b) => String(a.provincia ?? '').localeCompare(String(b.provincia ?? ''), 'it') || String(a.citta ?? '').localeCompare(String(b.citta ?? ''), 'it') || a.ragione_sociale.localeCompare(b.ragione_sociale, 'it'));
+
+// Excel accetta nomi di foglio fino a 31 caratteri, senza alcuni simboli, e tutti diversi
+function nomeFoglio(nome, usati){
+  const base = nome.replace(/[\\/?*[\]:]/g, ' ').trim().slice(0, 28) || 'Foglio';
+  let n = base, i = 2;
+  while (usati.has(n.toLowerCase())) n = `${base} ${i++}`;
+  usati.add(n.toLowerCase());
+  return n;
+}
+
+function aggiungiFoglioAgente(wb, nomeAgente, righe, usati){
+  const COL = [
+    { h:'ID', w:7 }, { h:'Codice', w:10 }, { h:'Libreria', w:38 }, { h:'Indirizzo', w:34 }, { h:'CAP', w:8 }, { h:'Città', w:22 }, { h:'Prov.', w:7 },
+    { h:'Stato', w:17 }, { h:'Motivo', w:24 }, { h:'Altri agenti', w:28 }, { h:'Copie', w:9 }, { h:'Copie confermate', w:12 },
+  ];
+  const HEAD = 4, COPIE = 11, CONF = 12;
+  const ws = wb.addWorksheet(nomeFoglio(nomeAgente, usati), {
+    views:[{ state:'frozen', ySplit:HEAD, xSplit:3, showGridLines:false }],
+    pageSetup:{ orientation:'landscape', paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0 },
+  });
+  ws.columns = COL.map(c => ({ width:c.w }));
+  ws.pageSetup.printTitlesRow = `${HEAD}:${HEAD}`;
+  const numero = numeroAperto();
+  const fascia = (n, valore, argb, size, bold, alt) => {
+    ws.mergeCells(n, 1, n, COL.length);
+    const c = ws.getCell(n, 1);
+    c.value = valore;
+    c.font = { name:'Calibri', size, bold, color:{ argb:XL.bianco } };
+    c.fill = riempi(argb);
+    c.alignment = { vertical:'middle', indent:1 };
+    ws.getRow(n).height = alt;
+  };
+  fascia(1, `${nomeAgente}${numero ? ' - ' + numero.titolo : ''}`, XL.scuro, 18, true, 32);
+  const copie = righe.reduce((t, r) => t + r.copie, 0), conf = righe.reduce((t, r) => t + (r.copie_confermate || 0), 0);
+  fascia(2, `${fmt(righe.length)} ${righe.length === 1 ? 'libreria' : 'librerie'}  ·  ${fmt(copie)} copie  ·  ${fmt(conf)} confermate  ·  Per correggere cambia solo la colonna Copie e ricarica il file`, XL.medio, 11, false, 22);
+  ws.getRow(3).height = 6;
+  const lato = { style:'thin', color:{ argb:XL.bordo } };
+  const bordi = { top:lato, left:lato, bottom:lato, right:lato };
+  const head = ws.getRow(HEAD);
+  head.values = COL.map(c => c.h);
+  head.height = 32;
+  head.eachCell(c => {
+    c.font = { name:'Calibri', size:11, bold:true, color:{ argb:XL.bianco } };
+    c.fill = riempi(XL.scuro);
+    c.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+    c.border = bordi;
+  });
+  righe.forEach((r, i) => {
+    const row = ws.addRow([
+      r.id, r.codice_cliente || '', r.ragione_sociale, r.indirizzo || '', r.cap || '', r.citta || '', r.provincia || '',
+      r._st.lab, r.motivo || '', r._agenti.filter(a => a !== nomeAgente).join(', '), r.copie, r.copie_confermate ?? null,
+    ]);
+    row.height = 18;
+    for (let n = 1; n <= COL.length; n++) {
+      const c = row.getCell(n);
+      c.font = { name:'Calibri', size:11, color:{ argb:XL.testo } };
+      c.fill = riempi(i % 2 ? XL.chiaro : XL.bianco);
+      c.border = bordi;
+      c.alignment = { vertical:'middle' };
+    }
+    row.getCell(1).font = { name:'Calibri', size:9, color:{ argb:'FF5B6B7D' } };
+    row.getCell(3).font = { name:'Calibri', size:11, bold:true, color:{ argb:XL.testo } };
+    [1, 2, 5, 7].forEach(n => { row.getCell(n).alignment = { vertical:'middle', horizontal:'center' }; });
+    const stato = row.getCell(8), col = XL.stato[r._st.c];
+    stato.font = { name:'Calibri', size:11, bold:true, color:{ argb:col.font } };
+    stato.fill = riempi(col.fill);
+    stato.alignment = { vertical:'middle', horizontal:'center' };
+    row.getCell(COPIE).numFmt = '#,##0';
+    row.getCell(COPIE).font = { name:'Calibri', size:11, bold:true, color:{ argb:XL.testo } };
+    row.getCell(CONF).numFmt = '#,##0';
+  });
+  const primo = HEAD + 1, ultimo = HEAD + righe.length;
+  const tot = ws.addRow([]);
+  tot.height = 26;
+  for (let n = 1; n <= COL.length; n++) {
+    const c = tot.getCell(n);
+    c.fill = riempi(XL.scuro);
+    c.font = { name:'Calibri', size:13, bold:true, color:{ argb:XL.bianco } };
+  }
+  tot.getCell(3).value = 'TOTALE';
+  [[COPIE, copie], [CONF, conf]].forEach(([n, result]) => {
+    const c = tot.getCell(n), l = ws.getColumn(n).letter;
+    c.value = righe.length ? { formula:`SUBTOTAL(109,${l}${primo}:${l}${ultimo})`, result } : 0;
+    c.numFmt = '#,##0';
+  });
+  if (righe.length) ws.autoFilter = { from:{ row:HEAD, column:1 }, to:{ row:ultimo, column:COL.length } };
+}
+
+function creaExcelAgenti(scelta){
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Indie Libri';
+  const usati = new Set();
+  if (scelta) {
+    aggiungiFoglioAgente(wb, scelta, righeDiAgente(scelta), usati);
+    return wb;
+  }
+  usati.add('riepilogo agenti');
+  aggiungiFoglioRiepilogo(wb, st.rows);
+  agentiDelNumero().forEach(nome => aggiungiFoglioAgente(wb, nome, righeDiAgente(nome), usati));
+  const senza = righeDiAgente(SENZA_AGENTE_NOME);
+  if (senza.length) aggiungiFoglioAgente(wb, SENZA_AGENTE_NOME, senza, usati);
+  return wb;
+}
+
+$('estrai-btn').addEventListener('click', () => {
+  const n = numeroAperto();
+  if (!n || !st.rows.length) { toast('Nessuna libreria in questo numero.', true); return; }
+  const nomi = agentiDelNumero();
+  const senza = righeDiAgente(SENZA_AGENTE_NOME).length;
+  $('estrai-agente').innerHTML = '<option value="">Tutti gli agenti (un foglio per ciascuno)</option>'
+    + nomi.map(a => `<option>${esc(a)}</option>`).join('')
+    + (senza ? `<option>${SENZA_AGENTE_NOME}</option>` : '');
+  $('estrai-hint').textContent = `${n.titolo}: tutte le librerie del numero, senza tener conto dei filtri. Una libreria con più agenti compare sotto ciascuno.`;
+  $('estrai-modal').classList.add('open');
+});
+const chiudiEstrai = () => $('estrai-modal').classList.remove('open');
+$('estrai-close').addEventListener('click', chiudiEstrai);
+$('estrai-modal').addEventListener('click', e => { if (e.target === $('estrai-modal')) chiudiEstrai(); });
+$('estrai-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('estrai-ok');
+  btn.disabled = true;
+  try {
+    await caricaExcelJS();
+    const scelta = $('estrai-agente').value;
+    const buf = await creaExcelAgenti(scelta).xlsx.writeBuffer();
+    const pulisci = s => s.normalize('NFD').replace(/[^A-Za-z0-9]+/g, '').slice(0, 30);
+    const data = new Date().toISOString().slice(0, 10);
+    scaricaFile(new Blob([buf], { type:XLSX_MIME }), `IndieLibri_DettaglioAgenti_${pulisci(numeroAperto().titolo)}_${scelta ? pulisci(scelta) + '_' : ''}${data}.xlsx`);
+    chiudiEstrai();
+  } catch (err) {
+    console.error(err);
+    toast('Estrazione non riuscita: ' + (err.message || err), true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ---------- CARICA EXCEL ---------- */
+// Aggiorna solo le copie del numero aperto: conferme e totale distribuito non cambiano
+let caricaPiano = null;
+function valoreCella(v){
+  if (v && typeof v === 'object') {
+    if (v instanceof Date) return v;
+    if ('result' in v) return v.result;
+    if ('text' in v) return v.text;
+    if (Array.isArray(v.richText)) return v.richText.map(t => t.text).join('');
+    return null;
+  }
+  return v;
+}
+const testoCella = v => { const x = valoreCella(v); return x == null ? '' : String(x).trim(); };
+const chiaveTitolo = s => testoCella(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Cerca l'intestazione nelle prime righe: vanno bene il file per agente, l'Esporta e ogni foglio con Codice e Copie
+function colonneFoglio(ws){
+  for (let n = 1; n <= Math.min(12, ws.rowCount); n++) {
+    const col = {};
+    ws.getRow(n).eachCell((c, i) => {
+      const t = chiaveTitolo(c.value);
+      if (t === 'id') col.id = i;
+      else if (t === 'codice' || t === 'codicecliente') col.codice = i;
+      else if (t === 'copie' || t === 'quantita' || t === 'qta') col.copie = i;
+      else if (t === 'libreria' || t === 'ragionesociale') col.nome = i;
+    });
+    if (col.copie && (col.id || col.codice)) return { riga:n, ...col };
+  }
+  return null;
+}
+
+function analizzaExcel(wb){
+  const perId = new Map(st.rows.map(r => [r.id, r]));
+  const perCodice = new Map();
+  st.rows.forEach(r => { if (r.codice_cliente) perCodice.set(r.codice_cliente, [...(perCodice.get(r.codice_cliente) || []), r]); });
+  const valori = new Map();
+  const ignote = [], doppie = [], errate = [];
+  let fogli = 0, vuote = 0;
+  wb.worksheets.forEach(ws => {
+    const col = colonneFoglio(ws);
+    if (!col) return;
+    fogli++;
+    for (let n = col.riga + 1; n <= ws.rowCount; n++) {
+      const row = ws.getRow(n);
+      const idTxt = col.id ? testoCella(row.getCell(col.id).value) : '';
+      const codice = col.codice ? testoCella(row.getCell(col.codice).value) : '';
+      if (!idTxt && !codice) continue; // righe vuote e TOTALE
+      const nome = (col.nome ? testoCella(row.getCell(col.nome).value) : '') || codice || idTxt;
+      let r = null;
+      if (idTxt) {
+        r = perId.get(Number(idTxt)) || null;
+        if (r && codice && r.codice_cliente && r.codice_cliente !== codice) r = null; // ID e codice non coincidono: meglio non indovinare
+      } else {
+        const trovate = perCodice.get(codice) || [];
+        if (trovate.length > 1) { doppie.push(nome); continue; }
+        r = trovate[0] || null;
+      }
+      if (!r) { ignote.push(nome); continue; }
+      const grezzo = valoreCella(row.getCell(col.copie).value);
+      if (grezzo == null || grezzo === '') { vuote++; continue; }
+      const num = typeof grezzo === 'number' ? grezzo : Number(String(grezzo).trim().replace(/\./g, '').replace(',', '.'));
+      if (!Number.isInteger(num) || num < 0) { errate.push(`${nome}: ${grezzo}`); continue; }
+      if (!valori.has(r.id)) valori.set(r.id, { r, set:new Set() });
+      valori.get(r.id).set.add(num);
+    }
+  });
+  const cambi = [], contrasti = [];
+  let uguali = 0;
+  valori.forEach(({ r, set }) => {
+    if (set.size > 1) { contrasti.push(`${r.ragione_sociale}: ${[...set].join(' / ')}`); return; }
+    const nuovo = [...set][0];
+    if (nuovo === r.copie) uguali++; else cambi.push({ r, nuovo });
+  });
+  cambi.sort((a, b) => a.r.ragione_sociale.localeCompare(b.r.ragione_sociale, 'it'));
+  // Il titolo del file dice a quale numero appartiene
+  const titoli = wb.worksheets.map(ws => testoCella(ws.getCell(1, 1).value));
+  const aperto = numeroAperto();
+  const altro = st.numeri.find(n => n.id !== aperto?.id && titoli.some(t => t.endsWith(' - ' + n.titolo)));
+  const diAltroNumero = altro && !titoli.some(t => t.endsWith(' - ' + aperto?.titolo)) ? altro.titolo : null;
+  return { fogli, cambi, uguali, vuote, ignote:[...new Set(ignote)], doppie:[...new Set(doppie)], errate, contrasti, diAltroNumero };
+}
+
+function mostraPiano(a, nomeFile){
+  caricaPiano = a;
+  const n = numeroAperto();
+  const delta = a.cambi.reduce((t, c) => t + c.nuovo - c.r.copie, 0);
+  const daRiconf = a.cambi.filter(c => c.r.copie_confermate != null).length;
+  $('carica-tit').textContent = `Carica Excel in ${n.titolo}`;
+  $('carica-hint').textContent = `${nomeFile}: ${fmt(a.cambi.length)} da cambiare, ${fmt(a.uguali)} già uguali${a.vuote ? `, ${fmt(a.vuote)} con copie vuote (restano com'erano)` : ''}.`
+    + (a.cambi.length ? ` Copie assegnate ${delta >= 0 ? '+' : ''}${fmt(delta)}.` : '');
+  const elenco = (tit, v) => v.length ? `<div class="carica-avviso">${esc(tit)} (${fmt(v.length)}): non vengono caricate.<small>${esc(v.slice(0, 12).join(' · '))}${v.length > 12 ? ' …' : ''}</small></div>` : '';
+  $('carica-avvisi').innerHTML =
+    (a.diAltroNumero ? `<div class="carica-avviso"><b>Attenzione:</b> il file sembra del numero ${esc(a.diAltroNumero)}, non di ${esc(n.titolo)}.</div>` : '')
+    + (daRiconf ? `<div class="carica-avviso">${fmt(daRiconf)} ${daRiconf === 1 ? 'è già confermata e andrà riconfermata' : 'sono già confermate e andranno riconfermate'}: fino ad allora il totale distribuito non cambia.</div>` : '')
+    + elenco('Valori diversi per la stessa libreria tra i fogli', a.contrasti)
+    + elenco('Copie non valide', a.errate)
+    + elenco('Codice presente più volte in elenco', a.doppie)
+    + elenco('Non trovate in questo numero', a.ignote);
+  $('carica-ris').innerHTML = a.cambi.map(c => `<div class="ris-row"><div class="inf"><b>${esc(c.r.ragione_sociale)}</b><small>${esc(c.r.codice_cliente || '')} · ${esc(c.r.citta || '')}${c.r.copie_confermate != null ? ' · già confermata' : ''}</small></div><span class="da-a">${fmt(c.r.copie)} → ${fmt(c.nuovo)}</span></div>`).join('');
+  const ok = $('carica-ok');
+  ok.style.display = a.cambi.length ? '' : 'none';
+  ok.disabled = false;
+  ok.textContent = `Applica ${fmt(a.cambi.length)} ${a.cambi.length === 1 ? 'modifica' : 'modifiche'}`;
+  $('carica-modal').classList.add('open');
+}
+const chiudiCarica = () => { $('carica-modal').classList.remove('open'); caricaPiano = null; };
+$('carica-close').addEventListener('click', chiudiCarica);
+$('carica-annulla').addEventListener('click', chiudiCarica);
+$('carica-modal').addEventListener('click', e => { if (e.target === $('carica-modal')) chiudiCarica(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { chiudiEstrai(); chiudiCarica(); } });
+
+$('carica-btn').addEventListener('click', () => {
+  if (st.numeroId == null || !st.rows.length) { toast('Nessuna libreria in questo numero.', true); return; }
+  $('carica-file').click();
+});
+async function leggiExcelCaricato(file){
+  await caricaExcelJS();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await file.arrayBuffer());
+  const a = analizzaExcel(wb);
+  if (!a.fogli) { toast('Nel file non ho trovato le colonne Copie e Codice (o ID).', true); return; }
+  mostraPiano(a, file.name);
+}
+$('carica-file').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = ''; // così si può ricaricare lo stesso file
+  if (!file) return;
+  if (!/\.xlsx$/i.test(file.name)) { toast('Serve un file .xlsx: se è un .xls, salvalo prima come .xlsx.', true); return; }
+  const btn = $('carica-btn');
+  btn.disabled = true;
+  try {
+    await leggiExcelCaricato(file);
+  } catch (err) {
+    console.error(err);
+    toast('File non leggibile: ' + (err.message || err), true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+$('carica-ok').addEventListener('click', async () => {
+  const piano = caricaPiano;
+  if (!piano) return;
+  const btn = $('carica-ok');
+  btn.disabled = true;
+  let ok = 0, ko = 0;
+  for (let i = 0; i < piano.cambi.length; i += 15) {
+    btn.textContent = `Salvo… ${i}/${piano.cambi.length}`;
+    await Promise.all(piano.cambi.slice(i, i + 15).map(async c => {
+      const { error } = await aggiornaDist(c.r, { copie:c.nuovo });
+      if (error) ko++; else ok++;
+    }));
+  }
+  chiudiCarica();
+  await caricaElenco();
+  toast(ko ? `Aggiornate ${fmt(ok)}, ${fmt(ko)} non riuscite: ricarica il file.` : `Copie aggiornate su ${fmt(ok)} librerie.`, !!ko);
 });
 
 /* ---------- EMAIL AGENTI ---------- */
