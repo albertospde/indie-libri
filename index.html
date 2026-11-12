@@ -169,6 +169,7 @@
   table.uguale tr.ref-riga td{ background:var(--card); }
   table.uguale tr.casa-riga:hover td,table.uguale tr.ref-riga:hover td{ background:var(--cyan-dim); }
   td.ref-freccia{ color:var(--text-dim); padding-left:20px; }
+  .casa-riga .freccia{ display:inline-block; width:16px; color:var(--cyan); }
   .cat-chip{ font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--cyan-dim); color:var(--text); white-space:nowrap; }
   .ref-box{ display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px; align-items:center; padding:10px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; }
   .ref-box .r-email{ grid-column:span 2; }
@@ -685,7 +686,7 @@ document.addEventListener('click', e => {
 }, true);
 document.addEventListener('click', e => {
   const tr = e.target.closest?.('table.uguale tbody tr');
-  if (!tr || tr.querySelector('td.vuoto') || e.target.closest('a,button,select,input,textarea,label')) return;
+  if (!tr || tr.dataset.casa || tr.querySelector('td.vuoto') || e.target.closest('a,button,select,input,textarea,label')) return; // la riga della casa editrice apre i referenti
   if (String(window.getSelection())) return; // chi seleziona un testo per copiarlo non apre la riga
   tr.classList.toggle('aperta');
 });
@@ -2461,7 +2462,15 @@ const COL_CASE = [
   { key:'regione', label:'Regione', w:120 },
 ];
 $('ind-cat').innerHTML = '<option value="">Tutte le categorie</option>' + Object.entries(CATEGORIE_REF).map(([k, t]) => `<option value="${k}">${t}</option>`).join('');
-$('ind-cat').addEventListener('change', () => disegnaInd());
+$('ind-cat').addEventListener('change', () => { espandiSeFiltri(); disegnaInd(); });
+
+// Case editrici aperte (referenti visibili). Si entra con tutto compresso;
+// con un filtro o una ricerca i referenti trovati si vedono subito, senza si torna a compresso
+let indEspanse = new Set();
+function espandiSeFiltri(){
+  if (!conReferenti(indTipo)) return;
+  indEspanse = $('ind-cat').value || $('ind-q').value.trim() ? new Set(indRighe.map(c => c.id)) : new Set();
+}
 
 // Casa editrice con i referenti subito sotto. Le colonne Referente e Categoria ordinano i referenti dentro ogni casa
 function disegnaCase(){
@@ -2497,14 +2506,14 @@ function disegnaCase(){
   const mail = v => v ? `<a href="mailto:${esc(v)}">${esc(v)}</a>` : vuoto;
   const tel = v => v ? `<a href="tel:${esc(String(v).replace(/[^\d+]/g, ''))}">${esc(v)}</a>` : vuoto;
   $('ind-body').innerHTML = gruppi.length ? gruppi.map(({ c, refs }) => {
-    const tutti = (c.referenti || []).length;
-    return `<tr class="casa-riga">
-      <td class="nome">${esc(denominazione(c))}</td>
+    const tutti = (c.referenti || []).length, aperta = indEspanse.has(c.id);
+    return `<tr class="casa-riga" data-casa="${c.id}"${refs.length ? ` aria-expanded="${aperta}" title="${aperta ? 'Clicca per comprimere' : 'Clicca per vedere i referenti'}"` : ''}>
+      <td class="nome"><span class="freccia">${refs.length ? (aperta ? '▾' : '▸') : ''}</span>${esc(denominazione(c))}</td>
       <td>${tutti ? `<span class="vuoto-c">${fmt(tutti)} ${tutti === 1 ? 'referente' : 'referenti'}</span>` : vuoto}</td>
       <td></td>
       <td>${mail(c.email)}</td><td>${tel(c.telefono)}</td><td>${testo(c.indirizzo)}</td><td>${testo(c.cap)}</td><td>${testo(c.citta)}</td><td>${testo(c.regione ? nomeRegione(c.regione) : '')}</td>
       <td><button class="btn-secondary" type="button" data-ind="${c.id}">✏ Modifica</button></td>
-    </tr>` + refs.map(x => `<tr class="ref-riga">
+    </tr>` + (aperta ? refs : []).map(x => `<tr class="ref-riga">
       <td class="ref-freccia">↳</td>
       <td>${testo(nomeRef(x))}</td>
       <td><span class="cat-chip">${esc(CATEGORIE_REF[x.categoria])}</span></td>
@@ -2600,6 +2609,7 @@ async function apriIndirizzario(tipo){
   $('ind-titolo').textContent = cfg.titolo;
   $('ind-q').value = '';
   $('ind-cat').value = '';
+  indEspanse = new Set();
   $('ind-cat').style.display = conReferenti(tipo) ? '' : 'none';
   $('ind-info').textContent = 'Caricamento…';
   impostaColonne($('ind-tab'), 'ind-' + tipo, [...colonneInd().map(c => ({ k:c.key, w:c.w })), { k:'azioni', w:110 }]);
@@ -2677,7 +2687,7 @@ function disegnaInd(){
   </tr>`).join('') : `<tr><td colspan="${colonne.length + 1}" class="vuoto">${n ? 'Nessun contatto con questi filtri.' : 'Ancora nessun contatto: comincia da Aggiungi nuovo.'}</td></tr>`;
 }
 
-$('ind-q').addEventListener('input', disegnaInd);
+$('ind-q').addEventListener('input', () => { espandiSeFiltri(); disegnaInd(); });
 $('ind-reg').addEventListener('change', disegnaInd);
 $('ind-head').addEventListener('click', e => {
   const th = e.target.closest('th[data-ordina]');
@@ -2731,7 +2741,12 @@ $('ind-modal').addEventListener('click', e => { if (e.target === $('ind-modal'))
 document.addEventListener('keydown', e => { if (e.key === 'Escape') chiudiInd(); });
 $('ind-body').addEventListener('click', e => {
   const b = e.target.closest('button[data-ind]');
-  if (b) apriInd(indRighe.find(r => r.id === Number(b.dataset.ind)));
+  if (b) { apriInd(indRighe.find(r => r.id === Number(b.dataset.ind))); return; }
+  const tr = e.target.closest('tr[data-casa]');
+  if (!tr || e.target.closest('a') || String(window.getSelection())) return;
+  const id = Number(tr.dataset.casa);
+  if (indEspanse.has(id)) indEspanse.delete(id); else indEspanse.add(id);
+  disegnaInd();
 });
 $('ind-form').addEventListener('submit', async e => {
   e.preventDefault();
