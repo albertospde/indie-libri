@@ -164,6 +164,15 @@
   .foglio .conta{ font-size:11.5px; font-variant-numeric:tabular-nums; opacity:.8; }
   .manca{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; background:var(--warn-bg); color:var(--warn-text); border-radius:10px; padding:10px 12px; margin-top:10px; font-size:14px; }
   .manca button{ padding:8px 12px; font-size:14px; }
+  /* ---------- CASE EDITRICI E REFERENTI ---------- */
+  table.uguale tr.casa-riga td{ background:var(--card-2); border-top:2px solid var(--border); }
+  table.uguale tr.ref-riga td{ background:var(--card); }
+  table.uguale tr.casa-riga:hover td,table.uguale tr.ref-riga:hover td{ background:var(--cyan-dim); }
+  td.ref-freccia{ color:var(--text-dim); padding-left:20px; }
+  .cat-chip{ font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--cyan-dim); color:var(--text); white-space:nowrap; }
+  .ref-box{ display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px; align-items:center; padding:10px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; }
+  .ref-box .r-email{ grid-column:span 2; }
+  @media (max-width:640px){ .ref-box{ grid-template-columns:1fr 1fr; } .ref-box .r-email{ grid-column:auto; } }
   .tab-aiuto{ font-size:12.5px; color:var(--text-dim); margin:0 0 8px; }
   td.agente{ font-size:12.5px; }
   td.agente .senza{ color:var(--text-dim); }
@@ -294,6 +303,7 @@
           <span class="spacer"></span>
           <input id="ind-q" type="search" placeholder="Cerca…" aria-label="Cerca nell'indirizzario" autocomplete="off" style="width:220px;" />
           <select id="ind-reg" aria-label="Filtra per regione" style="width:auto;"></select>
+          <select id="ind-cat" aria-label="Filtra per categoria del referente" style="width:auto;display:none;"></select>
           <button class="btn-secondary" id="ind-export" type="button">📥 Esporta</button>
           <button class="btn-primary" id="ind-new" type="button" style="padding:9px 14px;font-size:14.5px;">＋ Aggiungi nuovo</button>
         </div>
@@ -434,7 +444,7 @@
 <div class="modal-bg" id="ind-modal">
   <form class="modal" id="ind-form" role="dialog" aria-modal="true" aria-labelledby="ind-tit">
     <h3><span id="ind-tit">Aggiungi nuovo</span><button class="x-btn" id="ind-close" type="button" aria-label="Chiudi">×</button></h3>
-    <p class="hint">Scrivi almeno il nome, il cognome o la ragione sociale.</p>
+    <p class="hint" id="d-hint"></p>
     <div class="campi">
       <div><label for="d-nome">Nome</label><input id="d-nome" type="text" autocomplete="off" /></div>
       <div><label for="d-cognome">Cognome</label><input id="d-cognome" type="text" autocomplete="off" /></div>
@@ -448,6 +458,11 @@
       <div class="largo"><label for="d-reg">Regione</label><select id="d-reg"></select></div>
       <div><label for="d-tel">Telefono</label><input id="d-tel" type="tel" autocomplete="off" /></div>
       <div><label for="d-email">Email</label><input id="d-email" type="email" autocomplete="off" /></div>
+    </div>
+    <div id="d-ref-w" style="display:none;">
+      <div class="carica-sez">Referenti</div>
+      <div id="d-refs"></div>
+      <button class="btn-secondary" id="d-ref-add" type="button">＋ Aggiungi referente</button>
     </div>
     <div class="azioni">
       <button class="btn-secondary btn-danger" id="ind-del" type="button">Elimina</button>
@@ -2429,7 +2444,137 @@ let indTipo = null, indRighe = [], indVisibili = [], indInModifica = null;
 const ordineInd = { key:'cognome', dir:1 };
 const denominazione = r => r.ragione_sociale || [r.nome, r.cognome].filter(Boolean).join(' ');
 
+/* ---------- CASE EDITRICI: REFERENTI ---------- */
+const TAB_REF = 'indie_indirizzari_referenti';
+const CATEGORIE_REF = { commerciale:'Commerciale', ufficio_stampa:'Ufficio stampa', marketing:'Marketing', comunicazione:'Comunicazione' };
+const conReferenti = tipo => tipo === 'case_editrici';
+const nomeRef = x => [x.nome, x.cognome].filter(Boolean).join(' ');
+const COL_CASE = [
+  { key:'ragione_sociale', label:'Casa editrice', w:220 },
+  { key:'_ref', label:'Referente', w:180 },
+  { key:'_cat', label:'Categoria', w:140 },
+  { key:'email', label:'Email', w:210 },
+  { key:'telefono', label:'Telefono', w:130 },
+  { key:'indirizzo', label:'Indirizzo', w:200 },
+  { key:'cap', label:'CAP', w:85 },
+  { key:'citta', label:'Città', w:120 },
+  { key:'regione', label:'Regione', w:120 },
+];
+$('ind-cat').innerHTML = '<option value="">Tutte le categorie</option>' + Object.entries(CATEGORIE_REF).map(([k, t]) => `<option value="${k}">${t}</option>`).join('');
+$('ind-cat').addEventListener('change', () => disegnaInd());
+
+// Casa editrice con i referenti subito sotto. Le colonne Referente e Categoria ordinano i referenti dentro ogni casa
+function disegnaCase(){
+  const reg = $('ind-reg').value, cat = $('ind-cat').value;
+  const parole = norm($('ind-q').value).split(/\s+/).filter(Boolean);
+  const testoCasa = c => norm([c.ragione_sociale, c.email, c.telefono, c.indirizzo, c.cap, c.citta, c.regione ? nomeRegione(c.regione) : ''].join(' '));
+  const testoRef = x => norm([nomeRef(x), CATEGORIE_REF[x.categoria], x.email, x.telefono].join(' '));
+  const trova = t => parole.every(p => t.includes(p));
+  const { key:k, dir } = ordineInd, sulReferente = k === '_ref' || k === '_cat';
+  const posCat = x => Object.keys(CATEGORIE_REF).indexOf(x.categoria);
+  const ordRef = (a, b) => (sulReferente ? confronta(k === '_ref' ? nomeRef(a) : CATEGORIE_REF[a.categoria], k === '_ref' ? nomeRef(b) : CATEGORIE_REF[b.categoria], dir) : 0)
+    || posCat(a) - posCat(b) || nomeRef(a).localeCompare(nomeRef(b), 'it', { sensitivity:'base' });
+  const gruppi = [];
+  indRighe.forEach(c => {
+    if (reg && c.regione !== reg) return;
+    let refs = (c.referenti || []).filter(x => !cat || x.categoria === cat);
+    if (cat && !refs.length) return;
+    if (parole.length && !trova(testoCasa(c))) {
+      refs = refs.filter(x => trova(testoCasa(c) + ' ' + testoRef(x)));
+      if (!refs.length) return;
+    }
+    gruppi.push({ c, refs:[...refs].sort(ordRef) });
+  });
+  const valCasa = c => k === 'regione' ? (c.regione ? nomeRegione(c.regione) : '') : c[k];
+  gruppi.sort((x, y) => (sulReferente ? 0 : confronta(valCasa(x.c), valCasa(y.c), dir)) || denominazione(x.c).localeCompare(denominazione(y.c), 'it', { sensitivity:'base' }));
+  indVisibili = gruppi;
+
+  const n = indRighe.length, nRef = indRighe.reduce((t, c) => t + (c.referenti || []).length, 0);
+  $('ind-info').textContent = `${fmt(n)} ${n === 1 ? 'casa editrice' : 'case editrici'} · ${fmt(nRef)} ${nRef === 1 ? 'referente' : 'referenti'}${gruppi.length !== n ? ` · ${fmt(gruppi.length)} visibili` : ''}`;
+  $('ind-head').innerHTML = COL_CASE.map(c => testataOrd('data-ordina', c.key, c.label, k === c.key, dir)).join('') + '<th></th>';
+  const vuoto = '<span class="vuoto-c">—</span>';
+  const testo = v => v ? esc(v) : vuoto;
+  const mail = v => v ? `<a href="mailto:${esc(v)}">${esc(v)}</a>` : vuoto;
+  const tel = v => v ? `<a href="tel:${esc(String(v).replace(/[^\d+]/g, ''))}">${esc(v)}</a>` : vuoto;
+  $('ind-body').innerHTML = gruppi.length ? gruppi.map(({ c, refs }) => {
+    const tutti = (c.referenti || []).length;
+    return `<tr class="casa-riga">
+      <td class="nome">${esc(denominazione(c))}</td>
+      <td>${tutti ? `<span class="vuoto-c">${fmt(tutti)} ${tutti === 1 ? 'referente' : 'referenti'}</span>` : vuoto}</td>
+      <td></td>
+      <td>${mail(c.email)}</td><td>${tel(c.telefono)}</td><td>${testo(c.indirizzo)}</td><td>${testo(c.cap)}</td><td>${testo(c.citta)}</td><td>${testo(c.regione ? nomeRegione(c.regione) : '')}</td>
+      <td><button class="btn-secondary" type="button" data-ind="${c.id}">✏ Modifica</button></td>
+    </tr>` + refs.map(x => `<tr class="ref-riga">
+      <td class="ref-freccia">↳</td>
+      <td>${testo(nomeRef(x))}</td>
+      <td><span class="cat-chip">${esc(CATEGORIE_REF[x.categoria])}</span></td>
+      <td>${mail(x.email)}</td><td>${tel(x.telefono)}</td><td></td><td></td><td></td><td></td><td></td>
+    </tr>`).join('');
+  }).join('') : `<tr><td colspan="${COL_CASE.length + 1}" class="vuoto">${n ? 'Nessuna casa editrice con questi filtri.' : 'Ancora nessuna casa editrice: comincia da Aggiungi nuovo.'}</td></tr>`;
+}
+
+function esportaCase(btn, filtri){
+  const righe = indVisibili.flatMap(({ c, refs }) => refs.length ? refs.map(x => ({ c, x })) : [{ c, x:null }]);
+  const casa = k => r => r.c[k], ref = k => r => r.x?.[k];
+  const colonne = [
+    { label:'Casa editrice', w:220, val:r => denominazione(r.c) },
+    { label:'Indirizzo', w:200, val:casa('indirizzo') }, { label:'CAP', w:60, val:casa('cap') }, { label:'Città', w:120, val:casa('citta') },
+    { label:'Regione', w:120, val:r => r.c.regione ? nomeRegione(r.c.regione) : '' },
+    { label:'Telefono generale', w:130, val:casa('telefono') }, { label:'Email generale', w:210, val:casa('email') },
+    { label:'Categoria', w:120, val:r => r.x ? CATEGORIE_REF[r.x.categoria] : '' },
+    { label:'Nome referente', w:110, val:ref('nome') }, { label:'Cognome referente', w:130, val:ref('cognome') },
+    { label:'Telefono referente', w:130, val:ref('telefono') }, { label:'Email referente', w:210, val:ref('email') },
+  ];
+  esportaElenco(btn, { titolo:'Case editrici', colonne, righe, filtri, parole:['riga', 'righe'] });
+}
+
+function rigaReferente(x){
+  const opz = Object.entries(CATEGORIE_REF).map(([k, t]) => `<option value="${k}"${x?.categoria === k ? ' selected' : ''}>${t}</option>`).join('');
+  return `<div class="ref-box" data-ref-id="${x?.id ?? ''}">
+    <select class="r-cat" aria-label="Categoria del referente"><option value="">Categoria…</option>${opz}</select>
+    <input class="r-nome" type="text" placeholder="Nome" aria-label="Nome del referente" autocomplete="off" value="${esc(x?.nome || '')}" />
+    <input class="r-cognome" type="text" placeholder="Cognome" aria-label="Cognome del referente" autocomplete="off" value="${esc(x?.cognome || '')}" />
+    <button class="icon-btn r-togli" type="button" title="Togli referente" aria-label="Togli referente">✕</button>
+    <input class="r-tel" type="tel" placeholder="Telefono" aria-label="Telefono del referente" autocomplete="off" value="${esc(x?.telefono || '')}" />
+    <input class="r-email" type="email" placeholder="Email" aria-label="Email del referente" autocomplete="off" value="${esc(x?.email || '')}" />
+  </div>`;
+}
+$('d-ref-add').addEventListener('click', () => {
+  $('d-refs').insertAdjacentHTML('beforeend', rigaReferente(null));
+  $('d-refs').lastElementChild.querySelector('.r-cat').focus();
+});
+$('d-refs').addEventListener('click', e => { if (e.target.closest('.r-togli')) e.target.closest('.ref-box').remove(); });
+
+// Legge i referenti dalla scheda; restituisce un messaggio se qualcosa non va
+function leggiReferenti(){
+  const refs = [];
+  for (const box of $('d-refs').querySelectorAll('.ref-box')) {
+    const v = cls => box.querySelector(cls).value.trim() || null;
+    const x = { id:Number(box.dataset.refId) || null, categoria:v('.r-cat'), nome:v('.r-nome'), cognome:v('.r-cognome'), telefono:v('.r-tel'), email:v('.r-email')?.toLowerCase() || null };
+    const dati = x.nome || x.cognome || x.telefono || x.email;
+    if (!dati && !x.categoria) continue; // riga lasciata vuota
+    if (!x.categoria) return { errore:'Scegli la categoria di ogni referente.' };
+    if (!dati) return { errore:'Scrivi almeno nome, telefono o email di ogni referente.' };
+    if (x.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.email)) return { errore:`L'email di ${nomeRef(x) || 'un referente'} non è valida.` };
+    refs.push(x);
+  }
+  return { refs };
+}
+async function salvaReferenti(contattoId, prima, refs){
+  const firma = { aggiornato_il:new Date().toISOString(), aggiornato_da:currentUser?.email || null };
+  const campi = x => ({ categoria:x.categoria, nome:x.nome, cognome:x.cognome, telefono:x.telefono, email:x.email, ...firma });
+  const tenuti = new Set(refs.filter(x => x.id).map(x => x.id));
+  const via = prima.filter(x => !tenuti.has(x.id)).map(x => x.id);
+  const esiti = await Promise.all([
+    via.length ? sb.from(TAB_REF).delete().in('id', via) : { error:null },
+    ...refs.filter(x => x.id).map(x => sb.from(TAB_REF).update(campi(x)).eq('id', x.id)),
+    refs.some(x => !x.id) ? sb.from(TAB_REF).insert(refs.filter(x => !x.id).map(x => ({ ...campi(x), contatto_id:contattoId }))) : { error:null },
+  ]);
+  return esiti.find(x => x.error)?.error || null;
+}
+
 function colonneInd(){
+  if (conReferenti(indTipo)) return COL_CASE;
   const base = k => ({ key:k, val:r => r[k] });
   const extra = TIPI_IND[indTipo].extra;
   return [
@@ -2454,6 +2599,8 @@ async function apriIndirizzario(tipo){
   ordineInd.dir = 1;
   $('ind-titolo').textContent = cfg.titolo;
   $('ind-q').value = '';
+  $('ind-cat').value = '';
+  $('ind-cat').style.display = conReferenti(tipo) ? '' : 'none';
   $('ind-info').textContent = 'Caricamento…';
   impostaColonne($('ind-tab'), 'ind-' + tipo, [...colonneInd().map(c => ({ k:c.key, w:c.w })), { k:'azioni', w:110 }]);
   disegnaInd();
@@ -2463,7 +2610,7 @@ async function apriIndirizzario(tipo){
 async function leggiIndirizzario(tipo){
   const tutte = [];
   for (let da = 0; ; da += 1000) {
-    const { data, error } = await sb.from(TAB_IND).select('*').eq('tipo', tipo).order('id').range(da, da + 999);
+    const { data, error } = await sb.from(TAB_IND).select(conReferenti(tipo) ? '*, referenti:indie_indirizzari_referenti(*)' : '*').eq('tipo', tipo).order('id').range(da, da + 999);
     if (error) throw error;
     tutte.push(...data);
     if (data.length < 1000) return tutte;
@@ -2492,6 +2639,7 @@ async function caricaInd(){
 }
 
 function disegnaInd(){
+  if (conReferenti(indTipo)) { disegnaCase(); return; }
   const colonne = colonneInd(), reg = $('ind-reg').value;
   const parole = norm($('ind-q').value).split(/\s+/).filter(Boolean);
   const righe = indRighe.filter(r => {
@@ -2542,6 +2690,11 @@ $('ind-export').addEventListener('click', e => {
   const filtri = [], q = $('ind-q').value.trim(), sel = $('ind-reg');
   if (q) filtri.push(`ricerca "${q}"`);
   if (sel.value) filtri.push(sel.options[sel.selectedIndex].text);
+  if (conReferenti(indTipo)) {
+    if ($('ind-cat').value) filtri.push(CATEGORIE_REF[$('ind-cat').value]);
+    esportaCase(e.currentTarget, filtri);
+    return;
+  }
   esportaElenco(e.currentTarget, { titolo:TIPI_IND[indTipo].titolo, colonne:colonneInd(), righe:indVisibili, filtri });
 });
 
@@ -2557,9 +2710,19 @@ function apriInd(r, proposta){
   $('d-testata-w').style.display = extra === 'testata' ? '' : 'none';
   $('d-canali-w').style.display = extra === 'canali_social' ? '' : 'none';
   $('d-part-w').style.display = extra === 'n_partecipanti' ? '' : 'none';
+  // Casa editrice: nome e recapiti generali, le persone sono i referenti
+  const casa = conReferenti(indTipo);
+  $('d-nome').parentElement.style.display = casa ? 'none' : '';
+  $('d-cognome').parentElement.style.display = casa ? 'none' : '';
+  $('d-ragione').previousElementSibling.textContent = casa ? 'Casa editrice *' : 'Ragione sociale';
+  $('d-tel').previousElementSibling.textContent = casa ? 'Telefono generale' : 'Telefono';
+  $('d-email').previousElementSibling.textContent = casa ? 'Email generale' : 'Email';
+  $('d-hint').textContent = casa ? 'Nome e recapiti generali della casa editrice, poi i referenti.' : 'Scrivi almeno il nome, il cognome o la ragione sociale.';
+  $('d-ref-w').style.display = casa ? '' : 'none';
+  $('d-refs').innerHTML = casa ? [...(r?.referenti || [])].sort((a, b) => Object.keys(CATEGORIE_REF).indexOf(a.categoria) - Object.keys(CATEGORIE_REF).indexOf(b.categoria)).map(rigaReferente).join('') : '';
   $('ind-del').style.display = r ? '' : 'none';
   $('ind-modal').classList.add('open');
-  $('d-nome').focus();
+  (casa ? $('d-ragione') : $('d-nome')).focus();
 }
 function chiudiInd(){ $('ind-modal').classList.remove('open'); }
 $('ind-new').addEventListener('click', () => apriInd(null));
@@ -2579,6 +2742,16 @@ $('ind-form').addEventListener('submit', async e => {
   // Un campo nascosto non viene salvato
   ['testata', 'canali_social', 'n_partecipanti'].filter(k => k !== extra).forEach(k => { riga[k] = null; });
   riga.email = riga.email?.toLowerCase() || null;
+  const casa = conReferenti(indTipo);
+  let refs = [];
+  if (casa) {
+    riga.nome = null;
+    riga.cognome = null;
+    if (!riga.ragione_sociale) { toast('Scrivi il nome della casa editrice.', true); return; }
+    const letti = leggiReferenti();
+    if (letti.errore) { toast(letti.errore, true); return; }
+    refs = letti.refs;
+  }
   if (!riga.nome && !riga.cognome && !riga.ragione_sociale) { toast('Scrivi almeno il nome, il cognome o la ragione sociale.', true); return; }
   if (riga.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(riga.email)) { toast('L\'indirizzo email non è valido.', true); return; }
   if (riga.n_partecipanti != null) {
@@ -2586,17 +2759,20 @@ $('ind-form').addEventListener('submit', async e => {
     if (!Number.isInteger(riga.n_partecipanti) || riga.n_partecipanti < 0) { toast('Il numero di partecipanti deve essere un intero.', true); return; }
   }
   const r = indInModifica;
-  const { error } = r
+  const { data, error } = r
     ? await sb.from(TAB_IND).update(riga).eq('id', r.id)
-    : await sb.from(TAB_IND).insert({ ...riga, tipo:indTipo });
+    : await sb.from(TAB_IND).insert({ ...riga, tipo:indTipo }).select('id').single();
   if (error) { toast('Non salvato: ' + error.message, true); return; }
+  const erroreRef = casa ? await salvaReferenti(r ? r.id : data.id, r?.referenti || [], refs) : null;
   chiudiInd();
   await caricaInd();
+  if (erroreRef) { toast('Casa editrice salvata, ma non tutti i referenti: ' + erroreRef.message, true); return; }
   toast(r ? 'Contatto aggiornato.' : `Aggiunto: ${denominazione(riga)}.`);
 });
 $('ind-del').addEventListener('click', async () => {
   const r = indInModifica;
-  if (!r || !window.confirm(`Elimino ${denominazione(r)} da ${TIPI_IND[indTipo].titolo}? Non si può annullare.`)) return;
+  const conRef = r?.referenti?.length ? ` Con lei spariscono i suoi ${r.referenti.length} referenti.` : '';
+  if (!r || !window.confirm(`Elimino ${denominazione(r)} da ${TIPI_IND[indTipo].titolo}?${conRef} Non si può annullare.`)) return;
   const { error } = await sb.from(TAB_IND).delete().eq('id', r.id);
   if (error) { toast(error.code === '23503' ? 'È in distribuzione su un numero della rivista: toglilo prima da lì.' : 'Non eliminato: ' + error.message, true); return; }
   chiudiInd();
